@@ -4,6 +4,11 @@ import java.net.DatagramPacket
 import java.net.DatagramSocket
 import java.net.InetAddress
 import java.net.Socket
+import com.firewalldns.engine.core.PolicyAction
+import com.firewalldns.engine.core.PolicyEngine
+import com.firewalldns.engine.core.PolicyRequest
+import com.firewalldns.engine.core.PolicyRule
+import com.firewalldns.engine.core.RuleSource
 import java.util.concurrent.atomic.AtomicReference
 import kotlin.concurrent.thread
 import kotlin.math.ceil
@@ -96,6 +101,39 @@ class DnsLatencyBenchmarkTest {
             }
             val cacheStats = LatencyPercentiles.of(cacheSamples)
             println("DNS_BENCHMARK scenario=response_cache_hit samples=$sampleCount warmup=1 unit=us p50=${cacheStats.p50Micros} p95=${cacheStats.p95Micros} p99=${cacheStats.p99Micros}")
+
+            // Measure the deterministic policy decision path separately from
+            // DNS transport and response-cache costs.
+            val policyRules = (0 until 127).map { index ->
+                PolicyRule(
+                    id = "unmatched-$index",
+                    domain = "unmatched$index.example",
+                    action = PolicyAction.BLOCK,
+                    source = RuleSource.BUILTIN,
+                    priority = 127 - index,
+                    reason = "benchmark_rule",
+                )
+            } + PolicyRule(
+                id = "target",
+                domain = "target.example",
+                action = PolicyAction.BLOCK,
+                source = RuleSource.BUILTIN,
+                priority = 0,
+                reason = "benchmark_rule",
+            )
+            val policy = PolicyEngine(policyRules)
+            val policyRequest = PolicyRequest("target.example")
+            val policyWarmup = 1_000
+            val policySampleCount = 10_000
+            repeat(policyWarmup) { policy.evaluate(policyRequest, 1L) }
+            val policySamples = ArrayList<Long>(policySampleCount)
+            repeat(policySampleCount) {
+                val start = System.nanoTime()
+                policy.evaluate(policyRequest, 1L)
+                policySamples += System.nanoTime() - start
+            }
+            val policyStats = LatencyPercentiles.of(policySamples)
+            println("DNS_BENCHMARK scenario=policy_evaluation rules=128 samples=$policySampleCount warmup=$policyWarmup unit=us p50=${policyStats.p50Micros} p95=${policyStats.p95Micros} p99=${policyStats.p99Micros}")
         }
     }
 
