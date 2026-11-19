@@ -6,9 +6,16 @@ import java.net.InetAddress
 import kotlin.concurrent.thread
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
 
 class DnsUpstreamClientTest {
+    @Test fun rejectsHostnameUpstreamToAvoidSystemResolverRecursion() {
+        assertFailsWith<IllegalArgumentException> {
+            DnsUpstreamConfig("dns.example.com")
+        }
+    }
+
     @Test fun forwardsUdpQueryAndValidatesResponse() {
         DatagramSocket(0, InetAddress.getByName("127.0.0.1")).use { server ->
             server.soTimeout = 2_000
