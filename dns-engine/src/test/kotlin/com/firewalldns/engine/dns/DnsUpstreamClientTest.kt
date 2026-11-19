@@ -73,6 +73,48 @@ class DnsUpstreamClientTest {
         }
     }
 
+
+    @Test fun retriesTruncatedUdpResponseOverTcp() {
+        java.net.ServerSocket(0, 1, InetAddress.getLoopbackAddress()).use { tcpServer ->
+            tcpServer.soTimeout = 2_000
+            DatagramSocket(tcpServer.localPort, InetAddress.getLoopbackAddress()).use { udpServer ->
+                udpServer.soTimeout = 2_000
+                val query = query("example.com")
+                val udpResponder = thread {
+                    val incoming = DatagramPacket(ByteArray(512), 512)
+                    udpServer.receive(incoming)
+                    val truncated = responseFor(query).also {
+                        it[2] = 0x83.toByte() // QR + TC + RD
+                    }
+                    udpServer.send(DatagramPacket(truncated, truncated.size, incoming.socketAddress))
+                }
+                val tcpResponder = thread {
+                    tcpServer.accept().use { client ->
+                        client.soTimeout = 2_000
+                        val input = java.io.DataInputStream(client.getInputStream())
+                        val queryLength = input.readUnsignedShort()
+                        val receivedQuery = ByteArray(queryLength)
+                        input.readFully(receivedQuery)
+                        val response = responseFor(receivedQuery)
+                        client.getOutputStream().apply {
+                            write(DnsTcpFrameCodec.encode(response))
+                            flush()
+                        }
+                    }
+                }
+
+                val result = DnsUpstreamClient(
+                    DnsUpstreamConfig("127.0.0.1", tcpServer.localPort, timeoutMillis = 2_000),
+                ).exchange(query)
+
+                udpResponder.join(2_000)
+                tcpResponder.join(2_000)
+                val success = assertIs<DnsUpstreamResult.Success>(result)
+                assertEquals(DnsUpstreamTransport.TCP, success.response.transport)
+            }
+        }
+    }
+
     @Test fun rejectsMalformedQueryBeforeOpeningSocket() {
         val result = DnsUpstreamClient(DnsUpstreamConfig("127.0.0.1")).exchange(byteArrayOf(1, 2, 3))
         assertEquals("dns_header_truncated", assertIs<DnsUpstreamResult.Failure>(result).reason)
