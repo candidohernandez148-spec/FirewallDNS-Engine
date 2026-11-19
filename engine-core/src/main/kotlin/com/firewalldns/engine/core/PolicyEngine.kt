@@ -7,11 +7,18 @@ import java.util.concurrent.atomic.AtomicReference
  * immutable snapshot and perform no disk/network I/O or lock acquisition.
  */
 class PolicyEngine(initialRules: Collection<PolicyRule> = emptyList()) {
-    private val rules = AtomicReference(compile(initialRules))
+    private data class Snapshot(val revision: Long, val rules: List<CompiledRule>)
+
+    private val snapshot = AtomicReference(Snapshot(0, compile(initialRules)))
+
+    /** Monotonically advances after each successfully published ruleset. */
+    val revision: Long
+        get() = snapshot.get().revision
 
     /** Invalid updates are rejected as a whole; the active snapshot is retained. */
     fun replaceRules(newRules: Collection<PolicyRule>) {
-        rules.set(compile(newRules))
+        val compiled = compile(newRules)
+        snapshot.updateAndGet { current -> Snapshot(current.revision + 1, compiled) }
     }
 
     /** The explicit time parameter makes expiry behavior deterministic in tests. */
@@ -19,10 +26,15 @@ class PolicyEngine(initialRules: Collection<PolicyRule> = emptyList()) {
         request: PolicyRequest,
         nowEpochMillis: Long = System.currentTimeMillis(),
     ): PolicyDecision {
+        val current = snapshot.get()
         val domain = DomainNormalizer.normalize(request.domain)
-            ?: return PolicyDecision(PolicyAction.ALLOW, "invalid_domain_input")
+            ?: return PolicyDecision(
+                action = PolicyAction.ALLOW,
+                reason = "invalid_domain_input",
+                policyRevision = current.revision,
+            )
 
-        val winner = rules.get()
+        val winner = current.rules
             .asSequence()
             .filter { it.rule.enabled }
             .filter { it.rule.expiresAtEpochMillis?.let { expiry -> expiry > nowEpochMillis } ?: true }
@@ -33,8 +45,19 @@ class PolicyEngine(initialRules: Collection<PolicyRule> = emptyList()) {
             .firstOrNull { it.matches(domain) }
 
         return winner?.let {
-            PolicyDecision(it.rule.action, it.rule.reason, it.rule.id, it.rule.source)
-        } ?: PolicyDecision(PolicyAction.ALLOW, "no_matching_rule")
+            PolicyDecision(
+                action = it.rule.action,
+                reason = it.rule.reason,
+                ruleId = it.rule.id,
+                source = it.rule.source,
+                policyRevision = current.revision,
+                expiresAtEpochMillis = it.rule.expiresAtEpochMillis,
+            )
+        } ?: PolicyDecision(
+            action = PolicyAction.ALLOW,
+            reason = "no_matching_rule",
+            policyRevision = current.revision,
+        )
     }
 
     private data class CompiledRule(
