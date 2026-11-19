@@ -22,8 +22,10 @@
 - [x] Codec de framing DNS-over-TCP.
 - [x] Caché de decisiones acotada, con TTL y aislamiento por revisión de reglas.
 - [ ] Fuzzing y suite ampliada de mensajes malformados.
-- [ ] Transporte DNS UDP/TCP y reenvío upstream.
-- [ ] Timeouts, cancelación y manejo de errores de upstream.
+- [x] Transporte DNS upstream UDP con fallback TCP ante respuestas truncadas.
+- [x] Timeouts acotados, validación de respuestas y hook de protección de sockets.
+- [ ] Adaptador Android para conectar la protección de sockets con VpnService.protect.
+- [ ] Cancelación estructurada y pruebas contra resolvers reales.
 - [ ] Caché de respuestas DNS positiva/negativa con TTL (separada de la caché de decisiones).
 - [ ] Medición DNS P50/P95/P99.
 
