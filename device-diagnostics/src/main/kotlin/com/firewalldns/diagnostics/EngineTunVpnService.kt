@@ -132,7 +132,8 @@ class EngineTunVpnService : VpnService() {
                     val buffer = ByteArray(MAX_PACKET_BYTES)
                     while (running.get()) {
                         val length = input.read(buffer)
-                        if (length <= 0) continue
+                        if (length < 0) break
+                        if (length == 0) continue
                         packetsIn.incrementAndGet()
                         val packet = buffer.copyOf(length)
                         try {
@@ -265,8 +266,19 @@ class EngineTunVpnService : VpnService() {
         try { descriptor?.close() } catch (_: Throwable) {}
         reader?.interrupt()
         reader = null
-        val abandoned = workers?.shutdownNow().orEmpty()
+        val executor = workers
+        val abandoned = executor?.shutdownNow().orEmpty()
         if (abandoned.isNotEmpty()) stoppedBeforeResponse.addAndGet(abandoned.size.toLong())
+        if (executor != null) {
+            try {
+                if (!executor.awaitTermination(WORKER_SHUTDOWN_TIMEOUT_MS, TimeUnit.MILLISECONDS)) {
+                    // Do not block VPN teardown indefinitely; remaining tasks are accounted as abandoned.
+                    processorFailed.incrementAndGet()
+                }
+            } catch (_: InterruptedException) {
+                Thread.currentThread().interrupt()
+            }
+        }
         workers = null
         serviceState = "stopped"
         // Publish final counters before releasing the runtime so the Activity can export them.
@@ -290,5 +302,6 @@ class EngineTunVpnService : VpnService() {
         private const val WORKER_COUNT = 4
         private const val RING_CAPACITY = 256
         private const val STATUS_INTERVAL_MS = 500L
+        private const val WORKER_SHUTDOWN_TIMEOUT_MS = 2_000L
     }
 }
