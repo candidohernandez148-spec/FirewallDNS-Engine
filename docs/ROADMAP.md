@@ -27,7 +27,8 @@
 - [x] Adaptador Android aislado para conectar la protección de sockets con VpnService.protect (sin integración en el servicio VPN actual).
 - [x] Cancelación estructurada por intercambio: cierre del socket activo durante UDP/TCP; pruebas locales de cancelación.
 - [x] Caché acotada de respuestas DNS positivas/negativas con TTL, separada de la caché de decisiones; usa reloj monotónico, clave aislada por upstream/consulta/EDNS/CD, límites de entradas/bytes y reescritura de ID/flags/TTL.
-- [ ] Medición DNS P50/P95/P99.
+- [x] Harness reproducible de P50/P95/P99 para UDP loopback y caché, con workflow manual y cálculo nearest-rank.
+- [ ] Ejecutar medición en Android real (incluido Samsung A34 5G), comparar con Firestack y fijar umbrales con baseline reproducible.
 
 ## Fase 3 — Inteligencia integrada y determinista
 - [x] Indicadores curados iniciales para redes publicitarias y endpoints de tracking.
@@ -52,7 +53,8 @@
 ## Fase 6 — Observabilidad y rendimiento
 - [x] Contadores locales de decisiones, caché, rechazos y eventos descartados.
 - [x] Cola de eventos acotada con publicación no bloqueante y datos sensibles redactados por defecto.
-- [ ] Métricas P50/P95, throughput, CPU, RAM, batería y pérdidas.
+- [x] Harness de latencia DNS P50/P95/P99 separado por upstream y cache hit (loopback JVM; no equivale a medición de dispositivo).
+- [ ] Métricas P50/P95, throughput, CPU, RAM, batería y pérdidas en hardware real.
 - [ ] Pruebas prolongadas, concurrencia y reconexión.
 
 ## Fase 7 — Integración controlada
