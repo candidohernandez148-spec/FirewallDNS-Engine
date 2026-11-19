@@ -1,6 +1,16 @@
 package com.firewalldns.engine.dns
 
 /**
+ * Timing and outcome for one resolver attempt. The callback is diagnostic-only;
+ * callback failures are isolated from DNS resolution.
+ */
+data class DnsUpstreamAttempt(
+    val resolverIndex: Int,
+    val elapsedNanos: Long,
+    val result: DnsUpstreamResult,
+)
+
+/**
  * Tries configured upstreams in order. Only upstream-specific failures are
  * retried; invalid queries and local socket-protection failures are terminal.
  * Cancellation is terminal and is never retried.
@@ -25,11 +35,24 @@ class DnsUpstreamFailoverClient(
     fun exchange(
         query: ByteArray,
         cancellation: DnsExchangeCancellation,
+    ): DnsUpstreamResult = exchange(query, cancellation, null)
+
+    /** Optional observer; timing uses the monotonic clock and cannot affect DNS decisions. */
+    fun exchange(
+        query: ByteArray,
+        cancellation: DnsExchangeCancellation,
+        onAttempt: ((DnsUpstreamAttempt) -> Unit)?,
     ): DnsUpstreamResult {
         var lastFailure: DnsUpstreamResult.Failure? = null
         for (index in 0 until maxAttempts) {
             if (cancellation.isCancelled) return DnsUpstreamResult.Cancelled
-            when (val result = upstreams[index].exchange(query, cancellation)) {
+            val started = System.nanoTime()
+            val attemptResult = upstreams[index].exchange(query, cancellation)
+            val elapsed = System.nanoTime() - started
+            try { onAttempt?.invoke(DnsUpstreamAttempt(index, elapsed, attemptResult)) } catch (_: Throwable) {
+                // Observability must never change the resolver's decision.
+            }
+            when (val result = attemptResult) {
                 is DnsUpstreamResult.Success -> return result
                 DnsUpstreamResult.Cancelled -> return DnsUpstreamResult.Cancelled
                 is DnsUpstreamResult.Failure -> {
