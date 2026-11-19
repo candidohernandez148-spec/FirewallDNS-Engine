@@ -48,9 +48,10 @@
 - Validar protect(), ausencia de bucles y DNS leaks.
 
 ## Fase 6 — Observabilidad y rendimiento
-- Métricas P50/P95, throughput, CPU, RAM, batería, pérdidas y caché.
-- Eventos oportunos mediante flujo acotado y no bloqueante.
-- Pruebas prolongadas y de reconexión.
+- [x] Contadores locales de decisiones, caché, rechazos y eventos descartados.
+- [x] Cola de eventos acotada con publicación no bloqueante y datos sensibles redactados por defecto.
+- [ ] Métricas P50/P95, throughput, CPU, RAM, batería y pérdidas.
+- [ ] Pruebas prolongadas, concurrencia y reconexión.
 
 ## Fase 7 — Integración controlada
 - Adaptador con FirewallDNS sin duplicar VpnService.
