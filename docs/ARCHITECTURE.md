@@ -66,7 +66,7 @@ Las clases DNS distintas de IN se pasan sin aplicar políticas de dominio. Los t
 
 ## Caché de decisiones DNS
 
-La caché de decisiones está acotada por número de entradas, usa TTL corto y la revisión monotónica del snapshot de políticas como parte de la clave. La caducidad de una regla limita también la vida de su decisión cacheada. Las lecturas son concurrentes y sin bloqueo; las escrituras usan un bloqueo breve únicamente para mantener el límite estricto. Esta caché no almacena respuestas DNS ni sustituye la caché positiva/negativa de respuestas descrita arriba.
+La caché de decisiones está acotada por número de entradas, usa TTL corto y la revisión monotónica del snapshot de políticas como parte de la clave. La caducidad de una regla limita también la vida de su decisión cacheada. Las lecturas y escrituras usan primitivas concurrentes sin adquirir bloqueos; un contador atómico reserva capacidad y la expulsión es oportunista para mantener el límite estricto incluso bajo concurrencia. Esta caché no almacena respuestas DNS ni sustituye la caché positiva/negativa de respuestas descrita arriba.
 
 ## Concurrencia y estado
 - Evaluación acotada y sin I/O de disco en la ruta crítica.
