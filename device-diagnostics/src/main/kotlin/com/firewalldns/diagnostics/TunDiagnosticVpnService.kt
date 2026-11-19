@@ -11,7 +11,6 @@ import java.io.FileInputStream
 import java.net.DatagramPacket
 import java.net.DatagramSocket
 import java.net.InetAddress
-import java.net.InetSocketAddress
 import java.time.Instant
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CountDownLatch
@@ -19,8 +18,8 @@ import java.util.concurrent.TimeUnit
 import kotlin.concurrent.thread
 
 /**
- * Isolated VPN used only by the diagnostics APK. It routes exactly one reserved
- * laboratory /32 to a TUN descriptor and never forwards packets.
+ * VPN isolated to the diagnostics APK. Only 198.18.0.1/32 is routed here.
+ * It does not forward traffic, resolve DNS, or inspect other applications' packets.
  */
 class TunDiagnosticVpnService : VpnService() {
     @Volatile private var tun: ParcelFileDescriptor? = null
@@ -59,63 +58,89 @@ class TunDiagnosticVpnService : VpnService() {
         val receivedAt = ConcurrentHashMap<Int, Long>()
         val sentAt = ConcurrentHashMap<Int, Long>()
         val completed = CountDownLatch(PROBE_COUNT)
+
         reader = thread(name = "firewalldns-diagnostic-tun-reader") {
-            val input = FileInputStream(descriptor.fileDescriptor)
-            val buffer = ByteArray(32767)
             try {
-                while (running && completed.count > 0) {
-                    val length = input.read(buffer)
-                    if (length <= 0) continue
-                    val probe = Ipv4UdpProbeParser.parse(buffer, length) ?: continue
-                    if (probe.sequence in 0 until PROBE_COUNT &&
-                        receivedAt.putIfAbsent(probe.sequence, System.nanoTime()) == null
-                    ) {
-                        completed.countDown()
+                FileInputStream(descriptor.fileDescriptor).use { input ->
+                    val buffer = ByteArray(32767)
+                    while (running && completed.count > 0) {
+                        val length = input.read(buffer)
+                        if (length <= 0) continue
+                        val probe = Ipv4UdpProbeParser.parse(buffer, length) ?: continue
+                        if (probe.sequence in 0 until PROBE_COUNT &&
+                            receivedAt.putIfAbsent(probe.sequence, System.nanoTime()) == null
+                        ) {
+                            completed.countDown()
+                        }
                     }
                 }
             } catch (_: Throwable) {
-                // Closing the descriptor during teardown interrupts this reader.
-            } finally {
-                try { input.close() } catch (_: Throwable) { }
+                // Descriptor closure on service teardown releases this blocking read.
             }
         }
 
         thread(name = "firewalldns-diagnostic-tun-probes") {
-            val protectStarted = System.nanoTime()
-            val protectSocket = DatagramSocket(null)
-            val protectResult = try {
-                protect(protectSocket)
-            } finally {
-                protectSocket.close()
-            }
-            val protectElapsedUs = (System.nanoTime() - protectStarted) / 1_000
-
-            var sendErrors = 0
-            val destination = InetAddress.getByName("198.18.0.1")
-            DatagramSocket().use { socket ->
-                socket.soTimeout = 1000
-                repeat(PROBE_COUNT) { sequence ->
-                    val payload = ByteArray(8)
-                    writeInt(payload, 0, Ipv4UdpProbeParser.MAGIC)
-                    writeInt(payload, 4, sequence)
-                    sentAt[sequence] = System.nanoTime()
-                    try {
-                        socket.send(DatagramPacket(payload, payload.size, destination, Ipv4UdpProbeParser.DESTINATION_PORT))
-                    } catch (_: Throwable) {
-                        sentAt.remove(sequence)
-                        sendErrors++
-                    }
-                    try { Thread.sleep(PROBE_INTERVAL_MS) } catch (_: InterruptedException) { }
+            try {
+                val protectStarted = System.nanoTime()
+                val protectSocket = DatagramSocket(null)
+                val protectResult = try {
+                    protect(protectSocket)
+                } finally {
+                    protectSocket.close()
                 }
+                val protectElapsedUs = (System.nanoTime() - protectStarted) / 1_000
+
+                var sendErrors = 0
+                val destination = InetAddress.getByName("198.18.0.1")
+                DatagramSocket().use { socket ->
+                    repeat(PROBE_COUNT) { sequence ->
+                        val payload = ByteArray(8)
+                        writeInt(payload, 0, Ipv4UdpProbeParser.MAGIC)
+                        writeInt(payload, 4, sequence)
+                        sentAt[sequence] = System.nanoTime()
+                        try {
+                            socket.send(
+                                DatagramPacket(
+                                    payload,
+                                    payload.size,
+                                    destination,
+                                    Ipv4UdpProbeParser.DESTINATION_PORT,
+                                ),
+                            )
+                        } catch (_: Throwable) {
+                            sentAt.remove(sequence)
+                            sendErrors++
+                        }
+                        try {
+                            Thread.sleep(PROBE_INTERVAL_MS)
+                        } catch (_: InterruptedException) {
+                            Thread.currentThread().interrupt()
+                            throw IllegalStateException("Prueba interrumpida")
+                        }
+                    }
+                }
+
+                val allObserved = completed.await(PROBE_TIMEOUT_MS, TimeUnit.MILLISECONDS)
+                running = false
+                val latencies = receivedAt.entries.mapNotNull { (sequence, received) ->
+                    sentAt[sequence]?.let { (received - it).coerceAtLeast(0L) }
+                }.sorted()
+                val report = buildReport(
+                    protectResult,
+                    protectElapsedUs,
+                    PROBE_COUNT - sendErrors,
+                    receivedAt.size,
+                    sendErrors,
+                    latencies,
+                    allObserved,
+                )
+                publishResult(report)
+            } catch (failure: Throwable) {
+                running = false
+                publishFailure("tun_probe_failed", failure.message ?: failure.javaClass.simpleName)
+            } finally {
+                stopSelf()
             }
-            val allObserved = completed.await(PROBE_TIMEOUT_MS, TimeUnit.MILLISECONDS)
-            running = false
-            val latencies = receivedAt.entries.mapNotNull { (sequence, received) ->
-                sentAt[sequence]?.let { (received - it).coerceAtLeast(0L) }
-            }.sorted()
-            val report = buildReport(protectResult, protectElapsedUs, PROBE_COUNT - sendErrors, receivedAt.size, sendErrors, latencies, allObserved)
-            publishResult(report)
-            stopSelf()
         }
     }
 
@@ -130,7 +155,8 @@ class TunDiagnosticVpnService : VpnService() {
     ): String {
         fun percentile(p: Double): Long {
             if (latencies.isEmpty()) return 0
-            val index = (kotlin.math.ceil(p * latencies.size).toInt() - 1).coerceIn(0, latencies.lastIndex)
+            val index = (kotlin.math.ceil(p * latencies.size).toInt() - 1)
+                .coerceIn(0, latencies.lastIndex)
             return latencies[index] / 1_000
         }
         val lost = (sent - received).coerceAtLeast(0)
@@ -183,7 +209,11 @@ class TunDiagnosticVpnService : VpnService() {
     private fun notification(): Notification {
         val channelId = "firewalldns_tun_diagnostic"
         if (Build.VERSION.SDK_INT >= 26) {
-            val channel = NotificationChannel(channelId, "Diagnóstico VPN", NotificationManager.IMPORTANCE_LOW)
+            val channel = NotificationChannel(
+                channelId,
+                "Diagnóstico VPN",
+                NotificationManager.IMPORTANCE_LOW,
+            )
             getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
         }
         return if (Build.VERSION.SDK_INT >= 26) {
@@ -206,7 +236,10 @@ class TunDiagnosticVpnService : VpnService() {
 
     override fun onDestroy() {
         running = false
-        try { tun?.close() } catch (_: Throwable) { }
+        try {
+            tun?.close()
+        } catch (_: Throwable) {
+        }
         tun = null
         reader?.interrupt()
         super.onDestroy()
