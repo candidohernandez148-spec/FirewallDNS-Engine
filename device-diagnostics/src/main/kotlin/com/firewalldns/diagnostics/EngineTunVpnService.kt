@@ -7,6 +7,8 @@ import android.content.Intent
 import android.net.VpnService
 import android.os.Build
 import android.os.ParcelFileDescriptor
+import android.os.Handler
+import android.os.Looper
 import com.firewalldns.engine.android.AndroidEngineRuntime
 import com.firewalldns.engine.android.TunDnsPacketProcessor
 import com.firewalldns.engine.dns.DnsUpstreamConfig
@@ -16,6 +18,8 @@ import java.net.InetAddress
 import java.util.concurrent.ArrayBlockingQueue
 import java.util.concurrent.ThreadPoolExecutor
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.ScheduledExecutorService
+import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.concurrent.thread
@@ -30,6 +34,8 @@ class EngineTunVpnService : VpnService() {
     @Volatile private var reader: Thread? = null
     @Volatile private var workers: ThreadPoolExecutor? = null
     @Volatile private var activeRuntime: AndroidEngineRuntime? = null
+    @Volatile private var statusPublisher: ScheduledExecutorService? = null
+    @Volatile private var serviceState: String = "stopped"
     private val running = AtomicBoolean(false)
     private val packetsIn = AtomicLong()
     private val dnsProcessed = AtomicLong()
@@ -37,9 +43,15 @@ class EngineTunVpnService : VpnService() {
     private val responsesOut = AtomicLong()
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (intent?.action == ACTION_STATUS_REQUEST) {
+            publish(serviceState)
+            return START_NOT_STICKY
+        }
         if (intent?.action == ACTION_STOP) {
+            serviceState = "stopping"
+            publish(serviceState)
             stopDataPlane()
-            stopSelf(startId)
+            stopSelfResult(startId)
             return START_NOT_STICKY
         }
         if (intent?.action != ACTION_START || running.get()) {
@@ -51,10 +63,10 @@ class EngineTunVpnService : VpnService() {
             val descriptor = Builder()
                 .setSession("FirewallDNS Engine - DNS TUN")
                 .setMtu(TUN_MTU)
-                .addAddress(IPV4_DNS, 32)
+                .addAddress(IPV4_INTERFACE, 32)
                 .addDnsServer(InetAddress.getByName(IPV4_DNS))
                 .addRoute(IPV4_DNS, 32)
-                .addAddress(IPV6_DNS, 128)
+                .addAddress(IPV6_INTERFACE, 128)
                 .addDnsServer(InetAddress.getByName(IPV6_DNS))
                 .addRoute(IPV6_DNS, 128)
                 .establish()
@@ -65,11 +77,16 @@ class EngineTunVpnService : VpnService() {
             }
             tun = descriptor
             running.set(true)
+            serviceState = "starting"
             startDataPlane(descriptor)
-            publish("engine_dns_tun_started")
+            serviceState = "running"
+            startStatusPublisher()
+            publish(serviceState)
         } catch (failure: Throwable) {
-            publish("engine_dns_tun_start_failed:${failure.javaClass.simpleName}")
-            stopSelf(startId)
+            serviceState = "start_failed:${failure.javaClass.simpleName}"
+            publish(serviceState)
+            stopDataPlane()
+            stopSelfResult(startId)
         }
         return START_NOT_STICKY
     }
@@ -138,6 +155,15 @@ class EngineTunVpnService : VpnService() {
         }
     }
 
+    private fun startStatusPublisher() {
+        statusPublisher?.shutdownNow()
+        statusPublisher = Executors.newSingleThreadScheduledExecutor { task ->
+            Thread(task, "firewalldns-engine-status").apply { isDaemon = true }
+        }.also { scheduler ->
+            scheduler.scheduleAtFixedRate({ publish(serviceState) }, 0, STATUS_INTERVAL_MS, TimeUnit.MILLISECONDS)
+        }
+    }
+
     private fun publish(state: String) {
         val metrics = activeRuntime?.engine?.metrics()
         sendBroadcast(
@@ -150,7 +176,8 @@ class EngineTunVpnService : VpnService() {
                 .putExtra("blocked", metrics?.blocked ?: 0L)
                 .putExtra("observed", metrics?.observed ?: 0L)
                 .putExtra("allowed", metrics?.allowed ?: 0L)
-                .putExtra("rejected", metrics?.rejected ?: 0L),
+                .putExtra("rejected", metrics?.rejected ?: 0L)
+                .putExtra("updated_at_elapsed_ms", android.os.SystemClock.elapsedRealtime()),
         )
     }
 
@@ -189,15 +216,27 @@ class EngineTunVpnService : VpnService() {
         super.onDestroy()
     }
 
+    @Synchronized
     private fun stopDataPlane() {
-        running.set(false)
-        try { tun?.close() } catch (_: Throwable) {}
+        if (!running.getAndSet(false) && tun == null && workers == null) {
+            statusPublisher?.shutdownNow()
+            statusPublisher = null
+            stopForeground(STOP_FOREGROUND_REMOVE)
+            return
+        }
+        statusPublisher?.shutdownNow()
+        statusPublisher = null
+        // Closing the descriptor is what unblocks the TUN reader; interrupt alone is insufficient.
+        val descriptor = tun
         tun = null
+        try { descriptor?.close() } catch (_: Throwable) {}
         reader?.interrupt()
         reader = null
         workers?.shutdownNow()
         workers = null
         activeRuntime = null
+        serviceState = "stopped"
+        publish(serviceState)
         stopForeground(STOP_FOREGROUND_REMOVE)
     }
 
@@ -205,13 +244,17 @@ class EngineTunVpnService : VpnService() {
         const val ACTION_START = "com.firewalldns.diagnostics.ENGINE_TUN_START"
         const val ACTION_STOP = "com.firewalldns.diagnostics.ENGINE_TUN_STOP"
         const val ACTION_STATUS = "com.firewalldns.diagnostics.ENGINE_TUN_STATUS"
+        const val ACTION_STATUS_REQUEST = "com.firewalldns.diagnostics.ENGINE_TUN_STATUS_REQUEST"
         const val EXTRA_STATE = "state"
+        private const val IPV4_INTERFACE = "10.77.0.2"
         private const val IPV4_DNS = "10.77.0.1"
+        private const val IPV6_INTERFACE = "fd77::2"
         private const val IPV6_DNS = "fd77::1"
         private const val NOTIFICATION_ID = 7732
         private const val TUN_MTU = 1500
         private const val MAX_PACKET_BYTES = 65_535
         private const val WORKER_COUNT = 4
         private const val RING_CAPACITY = 256
+        private const val STATUS_INTERVAL_MS = 500L
     }
 }
