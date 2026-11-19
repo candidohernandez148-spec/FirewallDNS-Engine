@@ -18,13 +18,13 @@ class EngineMonitorTest {
         monitor.recordCacheMiss()
 
         val metrics = monitor.snapshot()
-        assertEquals(3, metrics.decisions)
-        assertEquals(1, metrics.blocked)
-        assertEquals(1, metrics.observed)
-        assertEquals(1, metrics.allowed)
-        assertEquals(1, metrics.rejected)
-        assertEquals(1, metrics.cacheHits)
-        assertEquals(1, metrics.cacheMisses)
+        assertEquals(3L, metrics.decisions)
+        assertEquals(1L, metrics.blocked)
+        assertEquals(1L, metrics.observed)
+        assertEquals(1L, metrics.allowed)
+        assertEquals(1L, metrics.rejected)
+        assertEquals(1L, metrics.cacheHits)
+        assertEquals(1L, metrics.cacheMisses)
         assertEquals(4, metrics.queuedEvents)
     }
 
@@ -34,7 +34,7 @@ class EngineMonitorTest {
         monitor.recordDecision("safe.example.com", null, PolicyDecision(PolicyAction.ALLOW, "allowed"), 2)
 
         assertEquals(1, monitor.snapshot().queuedEvents)
-        assertEquals(1, monitor.snapshot().eventsDropped)
+        assertEquals(1L, monitor.snapshot().eventsDropped)
         assertEquals("ads.example.com", monitor.pollEvent()?.domain)
         assertNull(monitor.pollEvent())
     }
