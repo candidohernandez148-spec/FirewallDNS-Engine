@@ -22,6 +22,8 @@ class PublicDnsActivity : Activity() {
     private lateinit var exportButton: Button
     private lateinit var failoverButton: Button
     private lateinit var tunButton: Button
+    private lateinit var engineTunButton: Button
+    private lateinit var stopEngineTunButton: Button
     @Volatile private var report: String? = null
     private var receiverRegistered = false
 
@@ -36,6 +38,17 @@ class PublicDnsActivity : Activity() {
             }
             exportButton.isEnabled = true
             tunButton.isEnabled = true
+        }
+    }
+
+    private val engineTunReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            val state = intent?.getStringExtra(EngineTunVpnService.EXTRA_STATE) ?: return
+            val packets = intent.getLongExtra("packets_in", 0)
+            val processed = intent.getLongExtra("dns_processed", 0)
+            val sent = intent.getLongExtra("responses_out", 0)
+            val dropped = intent.getLongExtra("dropped", 0)
+            status.text = "Motor propio en TUN: $state\\nPaquetes recibidos: $packets\\nDNS procesados: $processed\\nRespuestas enviadas: $sent\\nDescartados: $dropped\\n\\nAl terminar, pulsa Detener. Solo se enruta al túnel el DNS dirigido a sus direcciones virtuales; no es un firewall de todo el tráfico."
         }
     }
 
@@ -86,6 +99,20 @@ class PublicDnsActivity : Activity() {
         root.addView(exportButton)
         root.addView(failoverButton)
         root.addView(tunButton)
+        engineTunButton = Button(this).apply {
+            text = "Probar TUN con nuestro motor DNS real"
+            setOnClickListener { requestEngineTun() }
+        }
+        stopEngineTunButton = Button(this).apply {
+            text = "Detener motor TUN"
+            setOnClickListener {
+                val stop = Intent(this@PublicDnsActivity, EngineTunVpnService::class.java)
+                    .setAction(EngineTunVpnService.ACTION_STOP)
+                if (Build.VERSION.SDK_INT >= 26) startForegroundService(stop) else startService(stop)
+            }
+        }
+        root.addView(engineTunButton)
+        root.addView(stopEngineTunButton)
         root.addView(localButton)
         setContentView(ScrollView(this).apply { addView(root) })
     }
@@ -100,11 +127,19 @@ class PublicDnsActivity : Activity() {
             registerReceiver(tunResultReceiver, filter)
         }
         receiverRegistered = true
+        val engineFilter = IntentFilter(EngineTunVpnService.ACTION_STATUS)
+        if (Build.VERSION.SDK_INT >= 33) {
+            registerReceiver(engineTunReceiver, engineFilter, Context.RECEIVER_NOT_EXPORTED)
+        } else {
+            @Suppress("DEPRECATION")
+            registerReceiver(engineTunReceiver, engineFilter)
+        }
     }
 
     override fun onStop() {
         if (receiverRegistered) {
             unregisterReceiver(tunResultReceiver)
+            unregisterReceiver(engineTunReceiver)
             receiverRegistered = false
         }
         super.onStop()
@@ -127,6 +162,22 @@ class PublicDnsActivity : Activity() {
         val intent = Intent(this, TunDiagnosticVpnService::class.java)
             .setAction(TunDiagnosticVpnService.ACTION_START)
         if (Build.VERSION.SDK_INT >= 26) startForegroundService(intent) else startService(intent)
+    }
+
+    private fun requestEngineTun() {
+        val consentIntent = VpnService.prepare(this)
+        if (consentIntent != null) {
+            startActivityForResult(consentIntent, ENGINE_TUN_CONSENT_REQUEST)
+        } else {
+            startEngineTunService()
+        }
+    }
+
+    private fun startEngineTunService() {
+        status.text = "Iniciando VPN DNS de diagnóstico con FirewallDNS-Engine. Desactiva antes cualquier otra VPN. No se modifica el DNS global del teléfono."
+        val start = Intent(this, EngineTunVpnService::class.java)
+            .setAction(EngineTunVpnService.ACTION_START)
+        if (Build.VERSION.SDK_INT >= 26) startForegroundService(start) else startService(start)
     }
 
     private fun runTest() {
@@ -200,6 +251,14 @@ class PublicDnsActivity : Activity() {
     @Deprecated("Deprecated by Android API; retained for compatibility")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == ENGINE_TUN_CONSENT_REQUEST) {
+            if (resultCode == RESULT_OK) {
+                startEngineTunService()
+            } else {
+                status.text = "Permiso VPN denegado. No se inició el TUN del motor."
+            }
+            return
+        }
         if (requestCode == TUN_CONSENT_REQUEST) {
             if (resultCode == RESULT_OK) {
                 startTunService()
@@ -223,6 +282,7 @@ class PublicDnsActivity : Activity() {
     }
 
     private companion object {
+        const val ENGINE_TUN_CONSENT_REQUEST = 4110
         const val TUN_CONSENT_REQUEST = 4109
         const val SAVE_REPORT_REQUEST = 4108
         var pendingReport: String? = null
