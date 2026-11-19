@@ -1,6 +1,5 @@
 package com.firewalldns.engine.dns
 
-import java.util.Base64
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.locks.ReentrantLock
 import kotlin.concurrent.withLock
@@ -20,7 +19,18 @@ class DnsResponseCache(
     private val maxTtlSeconds: Long = DEFAULT_MAX_TTL_SECONDS,
 ) {
     private data class Entry(val response: ByteArray, val insertedAtNanos: Long, val ttlNanos: Long)
-    private val entries = ConcurrentHashMap<String, Entry>()
+
+    /** Content-based key avoids java.util.Base64, unavailable on Android API 24–25. */
+    private class CacheKey(val upstream: String, query: ByteArray) {
+        private val wireQuery = query.copyOf()
+
+        override fun equals(other: Any?): Boolean =
+            other is CacheKey && upstream == other.upstream && wireQuery.contentEquals(other.wireQuery)
+
+        override fun hashCode(): Int = 31 * upstream.hashCode() + wireQuery.contentHashCode()
+    }
+
+    private val entries = ConcurrentHashMap<CacheKey, Entry>()
     private val writeLock = ReentrantLock()
     private var currentBytes: Int = 0
 
@@ -100,12 +110,12 @@ class DnsResponseCache(
         }
     }
 
-    private fun key(upstream: String, query: ByteArray): String {
+    private fun key(upstream: String, query: ByteArray): CacheKey {
         val canonical = query.copyOf()
         canonical[0] = 0
         canonical[1] = 0
         putU16(canonical, 2, u16(canonical, 2) and RD_MASK.inv())
-        return upstream + "|" + Base64.getEncoder().encodeToString(canonical)
+        return CacheKey(upstream, canonical)
     }
 
     /**
