@@ -52,6 +52,10 @@ Definir interfaces y medir alternativas. Se prefiere integrar un stack probado a
 
 El módulo `threat-engine` incorpora una lista pequeña de indicadores publicitarios y de tracking. Los indicadores de publicidad de alta confianza pueden sugerir BLOCK; los endpoints de tracking seleccionados sugieren OBSERVE. Las heurísticas por etiquetas DNS (por ejemplo, términos de anuncios o tracking) solo sugieren OBSERVE. Una allowlist evita que estas heurísticas afecten dominios esenciales conocidos. Las reglas explícitas del usuario se evalúan antes y prevalecen. No hay todavía feed firmado ni cobertura exhaustiva de malware/phishing.
 
+## Estado del monitor local
+
+El módulo `engine-monitor` mantiene contadores con acumuladores concurrentes y una cola lock-free acotada para eventos locales. Publicar eventos no realiza I/O y no espera a un consumidor; al llenarse la cola, descarta el evento y aumenta un contador. Los dominios y paquetes se redactan por defecto y solo se incluyen mediante opt-in local. El consumidor puede extraer eventos mediante polling o lotes; no se crea un hilo de UI ni de almacenamiento dentro del motor.
+
 ## Estado del prototipo DNS
 
 El módulo `dns-engine` contiene un parser de consultas DNS de una pregunta, con validación de cabecera y QNAME, una sección adicional opcional EDNS(0) OPT, evaluación contra `engine-core` y síntesis NXDOMAIN. La respuesta local conserva ID, pregunta, RD/CD, tamaño UDP anunciado y el bit DNSSEC OK; no copia las opciones EDNS del cliente.
