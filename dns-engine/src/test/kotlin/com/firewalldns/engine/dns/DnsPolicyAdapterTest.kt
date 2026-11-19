@@ -28,10 +28,10 @@ class DnsPolicyAdapterTest {
         adapter.evaluate(query("ads.doubleclick.net"), nowEpochMillis = 2)
 
         val metrics = monitor.snapshot()
-        assertEquals(2, metrics.decisions)
-        assertEquals(2, metrics.blocked)
-        assertEquals(1, metrics.cacheMisses)
-        assertEquals(1, metrics.cacheHits)
+        assertEquals(2L, metrics.decisions)
+        assertEquals(2L, metrics.blocked)
+        assertEquals(1L, metrics.cacheMisses)
+        assertEquals(1L, metrics.cacheHits)
         assertEquals("ads.doubleclick.net", monitor.pollEvent()?.domain)
     }
 
@@ -40,7 +40,7 @@ class DnsPolicyAdapterTest {
         val result = DnsPolicyAdapter(PolicyEngine(), monitor = monitor)
             .evaluate(byteArrayOf(1, 2, 3), nowEpochMillis = 10)
         assertIs<DnsEvaluation.Rejected>(result)
-        assertEquals(1, monitor.snapshot().rejected)
+        assertEquals(1L, monitor.snapshot().rejected)
     }
 
     @Test fun builtInThreatIntelligenceBlocksKnownAdDeliveryDomain() {
