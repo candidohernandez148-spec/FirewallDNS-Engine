@@ -42,6 +42,48 @@ class DnsUpstreamFailoverClientTest {
     }
 
     @Test
+    fun retriesWhenPrimaryReturnsMalformedDnsResponse() {
+        DatagramSocket(0, InetAddress.getByName("127.0.0.1")).use { malformedResolver ->
+            DatagramSocket(0, InetAddress.getByName("127.0.0.1")).use { healthyResolver ->
+                val query = query()
+                val malformedResponder = thread {
+                    val incoming = DatagramPacket(ByteArray(512), 512)
+                    malformedResolver.receive(incoming)
+                    val malformed = query.copyOf().also {
+                        it[2] = 0x81.toByte()
+                        it[3] = 0x80.toByte()
+                        it[7] = 1 // Advertise one answer but omit its record bytes.
+                    }
+                    malformedResolver.send(
+                        DatagramPacket(malformed, malformed.size, incoming.socketAddress),
+                    )
+                }
+                val healthyResponder = thread {
+                    val incoming = DatagramPacket(ByteArray(512), 512)
+                    healthyResolver.receive(incoming)
+                    val response = query.copyOf().also {
+                        it[2] = 0x81.toByte()
+                        it[3] = 0x80.toByte()
+                    }
+                    healthyResolver.send(
+                        DatagramPacket(response, response.size, incoming.socketAddress),
+                    )
+                }
+
+                val result = DnsUpstreamFailoverClient(
+                    listOf(client(malformedResolver.localPort, 500), client(healthyResolver.localPort, 500)),
+                ).exchange(query)
+
+                malformedResponder.join(2_000)
+                healthyResponder.join(2_000)
+                assertIs<DnsUpstreamResult.Success>(result)
+                assertTrue(!malformedResponder.isAlive, "Primary malformed responder did not finish")
+                assertTrue(!healthyResponder.isAlive, "Secondary healthy responder did not finish")
+            }
+        }
+    }
+
+    @Test
     fun returnsLastResolverFailureWhenAllResolversFail() {
         DatagramSocket(0, InetAddress.getByName("127.0.0.1")).use { first ->
             DatagramSocket(0, InetAddress.getByName("127.0.0.1")).use { second ->
