@@ -35,7 +35,7 @@ class NativePacketCoreInstrumentedTest {
         val badIpv4Checksum = ipv4DnsPacket().also { it[8] = 63 }
         assertParity(badIpv4Checksum, expected = 0)
 
-        val badIpv6Checksum = ipv6DnsPacket().also { it[47] = 0 }
+        val badIpv6Checksum = ipv6DnsPacket().also { it[47] = (it[47].toInt() xor 1).toByte() }
         assertParity(badIpv6Checksum, expected = 0)
 
         val truncated = ipv4DnsPacket().copyOf(27)
@@ -64,7 +64,7 @@ class NativePacketCoreInstrumentedTest {
         val warmups = 30
         val samples = 250
 
-        fun measure(name: String, validate: () -> Int): LongArray {
+        fun measure(validate: () -> Int): LongArray {
             repeat(warmups) { assertEquals( if (label == "ipv4") 4 else 6, validate()) }
             return LongArray(samples) {
                 val start = System.nanoTime()
@@ -75,8 +75,8 @@ class NativePacketCoreInstrumentedTest {
             }
         }
 
-        val kotlinTimes = measure("kotlin") { kotlinValidateDnsUdpPacket(packet) }
-        val rustTimes = measure("rust_jni") {
+        val kotlinTimes = measure { kotlinValidateDnsUdpPacket(packet) }
+        val rustTimes = measure {
             NativePacketCore.validateDnsUdpPacket(packet, packet.size)
                 ?: error("Rust JNI library is unavailable on this device")
         }
