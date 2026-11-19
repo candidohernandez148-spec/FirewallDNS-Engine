@@ -14,10 +14,12 @@
 - Monitor: orden de eventos, capacidad máxima, descartes contabilizados, redacción de datos sensibles, métricas concurrentes y UI no bloqueante.
 
 ## Robustez DNS y fuzzing
-- `DnsMessageParserFuzzTest` incorpora casos malformados conocidos y pruebas deterministas con entradas aleatorias y mutaciones de consultas válidas.
-- La prueba determinista es un smoke-fuzzer reproducible; no sustituye fuzzing guiado por cobertura, sanitización ni campañas prolongadas.
-- Ejecutar la suite en CI y registrar semilla/iteración si aparece una regresión para que el caso pueda convertirse en fixture permanente.
-- Ampliar casos EDNS/TLV y framing TCP; cubrir tamaños límite y respuestas upstream malformadas antes de probar resolvers externos.
+- `DnsMessageParserFuzzTest` cubre casos malformados conocidos, entradas aleatorias y mutaciones deterministas de consultas válidas.
+- `DnsEdnsRobustnessTest` cubre OPT válido, múltiples opciones, DO bit, TLV truncado, longitud de opción excesiva y RDLENGTH inconsistente.
+- `DnsTcpFrameCodecTest` y `DnsTcpFrameFuzzTest` cubren prefijo/cuerpo parciales, longitudes 0–11, múltiples frames, tamaño máximo, mutaciones y entradas aleatorias.
+- `DnsUpstreamMalformedResponseTest` comprueba rechazo de cabeceras upstream truncadas y paquetes que no son respuestas.
+- Estas pruebas son smoke-fuzzers reproducibles; no sustituyen fuzzing guiado por cobertura, sanitización ni campañas prolongadas.
+- Ejecutar la suite en CI y registrar semilla/iteración si aparece una regresión para convertir el caso en fixture permanente. Resolver reales y cancelación estructurada siguen pendientes.
 
 ## Matriz mínima
 - Samsung Galaxy A34 5G como dispositivo de referencia.
