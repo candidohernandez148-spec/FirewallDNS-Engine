@@ -66,11 +66,14 @@ class DnsPolicyAdapterTest {
         packet[base.size + 2] = 41
         packet[base.size + 3] = 0x04
         packet[base.size + 4] = 0xd0.toByte()
+        packet[base.size + 7] = 0x80.toByte() // DNSSEC OK
         val result = assertIs<DnsEvaluation.Blocked>(
             DnsPolicyAdapter(PolicyEngine(listOf(rule("ads.example.com", PolicyAction.BLOCK)))).evaluate(packet),
         )
         assertEquals(1, u16(result.response, 10))
-        assertContentEquals(packet.copyOfRange(base.size, packet.size), result.response.copyOfRange(base.size, result.response.size))
+        assertEquals(0, u16(result.response, base.size + 9)) // Do not echo client-only EDNS options.
+        assertEquals(0x80, result.response[base.size + 7].toInt() and 0xff) // Preserve DO.
+        assertEquals(0x04d0, u16(result.response, base.size + 3))
     }
 
     @Test fun nonInternetDnsClassIsForwardedWithoutDomainPolicy() {
