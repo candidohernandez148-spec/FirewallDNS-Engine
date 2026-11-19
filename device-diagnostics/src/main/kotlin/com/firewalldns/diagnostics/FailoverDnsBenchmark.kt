@@ -136,7 +136,7 @@ internal object FailoverDnsBenchmark {
             }
             val report = """
                 {
-                  "format": "firewalldns-engine-failover-diagnostic-v1",
+                  "format": "firewalldns-engine-failover-diagnostic-v2",
                   "created_at_utc": "${Instant.now()}",
                   "device": {
                     "manufacturer": ${json(Build.MANUFACTURER)},
