@@ -55,7 +55,7 @@ El codec DNS-over-TCP solo maneja el prefijo de longitud de dos bytes y mensajes
 
 Las clases DNS distintas de IN se pasan sin aplicar políticas de dominio. Los tipos A/AAAA y otros tipos IN se evalúan por nombre; el módulo no interpreta RDATA ni genera respuestas A/AAAA permitidas.
 
-## Concurrencia y persistencia
+## Caché de decisiones DNS\n\nLa caché de decisiones está acotada por número de entradas, usa TTL corto y la revisión monotónica del snapshot de políticas como parte de la clave. La caducidad de una regla limita también la vida de su decisión cacheada. Las lecturas son concurrentes y sin bloqueo; las escrituras usan un bloqueo breve únicamente para mantener el límite estricto. Esta caché no almacena respuestas DNS ni sustituye la futura caché positiva/negativa de respuestas.\n\n## Concurrencia y persistencia
 - Evaluación síncrona, acotada y sin disco en la ruta crítica.
 - Room/SQLite fuera de la ruta crítica; WAL se evaluará con mediciones.
 - Reglas activas como snapshots inmutables.
