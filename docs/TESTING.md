@@ -4,7 +4,7 @@
 - Policy Engine: precedencia, conflictos, expiración, reglas por aplicación, decisiones y explicabilidad.
 - DNS Engine: nombres inválidos, IDN, etiquetas de servicio, mayúsculas, punto final, EDNS(0), TLV malformado, clases DNS, NXDOMAIN y truncamiento.
 - DNS TCP framing: prefijo parcial, cuerpo parcial, longitud inválida, múltiples frames en un buffer y límites.
-- DNS upstream: respuesta UDP válida, ID/pregunta incorrectos, fallback TCP ante TC, clase DNS no IN, timeout, rechazo de socket no protegido, dirección upstream no numérica y aciertos de caché sin segunda consulta de red.
+- DNS upstream: respuesta UDP válida, ID/pregunta incorrectos, fallback TCP ante TC, clase DNS no IN, timeout, rechazo de socket no protegido, dirección upstream no numérica, aciertos de caché sin segunda consulta de red y cancelación durante espera UDP/TCP.
 - DNS response cache: TTL positivo mínimo, RFC 2308 negativo (SOA TTL/MINIMUM), expiración monotónica, decremento de TTL en hits, aislamiento por consulta/upstream, límite de entradas y exclusión de TTL=0/SERVFAIL/TC/mensajes malformados.
 - Fast Cache: concurrencia, expiración, invalidación, presión de memoria y resultados obsoletos.
 - App Identity: UID no disponible, paquete eliminado, perfiles de trabajo y restricciones Android.
@@ -19,7 +19,7 @@
 - `DnsTcpFrameCodecTest` y `DnsTcpFrameFuzzTest` cubren prefijo/cuerpo parciales, longitudes 0–11, múltiples frames, tamaño máximo, mutaciones y entradas aleatorias.
 - `DnsUpstreamMalformedResponseTest` comprueba rechazo de cabeceras upstream truncadas y paquetes que no son respuestas.
 - Estas pruebas son smoke-fuzzers reproducibles; no sustituyen fuzzing guiado por cobertura, sanitización ni campañas prolongadas.
-- Ejecutar la suite en CI y registrar semilla/iteración si aparece una regresión para convertir el caso en fixture permanente. Resolver reales y cancelación estructurada siguen pendientes.
+- Ejecutar la suite en CI y registrar semilla/iteración si aparece una regresión para convertir el caso en fixture permanente. Los resolutores reales se validan mediante `DnsLiveResolverIntegrationTest`; la cancelación UDP/TCP se cubre con sockets locales deterministas.
 
 
 ### Resolutores DNS reales (integración optativa)
