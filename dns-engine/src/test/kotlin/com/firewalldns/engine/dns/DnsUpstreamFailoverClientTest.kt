@@ -42,6 +42,32 @@ class DnsUpstreamFailoverClientTest {
     }
 
     @Test
+    fun reportsEachAttemptDurationWithoutChangingFailover() {
+        DatagramSocket(0, InetAddress.getByName("127.0.0.1")).use { silent ->
+            DatagramSocket(0, InetAddress.getByName("127.0.0.1")).use { healthy ->
+                val q = query()
+                val responder = thread {
+                    val incoming = DatagramPacket(ByteArray(512), 512)
+                    healthy.receive(incoming)
+                    val response = q.copyOf().also { it[2] = 0x81.toByte(); it[3] = 0x80.toByte() }
+                    healthy.send(DatagramPacket(response, response.size, incoming.socketAddress))
+                }
+                val attempts = mutableListOf<DnsUpstreamAttempt>()
+                val result = DnsUpstreamFailoverClient(
+                    listOf(client(silent.localPort, 70), client(healthy.localPort, 500)),
+                ).exchange(q, DnsExchangeCancellation()) { attempts += it }
+                responder.join(2_000)
+                assertIs<DnsUpstreamResult.Success>(result)
+                assertEquals(listOf(0, 1), attempts.map { it.resolverIndex })
+                assertTrue(attempts.all { it.elapsedNanos > 0L })
+                assertIs<DnsUpstreamResult.Failure>(attempts.first().result)
+                assertIs<DnsUpstreamResult.Success>(attempts.last().result)
+                assertTrue(!responder.isAlive)
+            }
+        }
+    }
+
+    @Test
     fun retriesWhenPrimaryReturnsMalformedDnsResponse() {
         DatagramSocket(0, InetAddress.getByName("127.0.0.1")).use { malformedResolver ->
             DatagramSocket(0, InetAddress.getByName("127.0.0.1")).use { healthyResolver ->
