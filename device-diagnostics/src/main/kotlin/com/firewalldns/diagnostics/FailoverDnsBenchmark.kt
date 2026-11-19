@@ -27,9 +27,13 @@ internal object FailoverDnsBenchmark {
         val secondary: String,
         val successes: Int,
         val failures: Int,
-        val p50Us: Long?,
-        val p95Us: Long?,
-        val p99Us: Long?,
+        val totalP50Us: Long?,
+        val totalP95Us: Long?,
+        val totalP99Us: Long?,
+        val primaryP50Us: Long?,
+        val primaryP95Us: Long?,
+        val secondaryP50Us: Long?,
+        val secondaryP95Us: Long?,
         val errors: Map<String, Int>,
     )
 
@@ -57,7 +61,9 @@ internal object FailoverDnsBenchmark {
                     DnsUpstreamConfig(address, port = 53, timeoutMillis = secondaryTimeoutMs),
                     NoopSocketProtector,
                 )
-                val latencies = ArrayList<Long>(samples)
+                val totalLatencies = ArrayList<Long>(samples)
+                val primaryLatencies = ArrayList<Long>(samples)
+                val secondaryLatencies = ArrayList<Long>(samples)
                 val errors = linkedMapOf<String, Int>()
                 var successes = 0
                 var failures = 0
@@ -73,11 +79,16 @@ internal object FailoverDnsBenchmark {
                     val nonce = UUID.randomUUID().toString().replace("-", "").take(12)
                     val query = dnsQuery("fdns-failover-$resolverIndex-$index-$nonce.example.com", id)
                     val started = System.nanoTime()
-                    val result = failover.exchange(query)
+                    val attemptDurations = mutableMapOf<Int, Long>()
+                    val result = failover.exchange(query, com.firewalldns.engine.dns.DnsExchangeCancellation()) {
+                        attemptDurations[it.resolverIndex] = it.elapsedNanos
+                    }
                     val elapsed = System.nanoTime() - started
+                    attemptDurations[0]?.let { primaryLatencies += it }
+                    attemptDurations[1]?.let { secondaryLatencies += it }
                     if (result is DnsUpstreamResult.Success) {
                         successes++
-                        latencies += elapsed
+                        totalLatencies += elapsed
                     } else {
                         failures++
                         val reason = when (result) {
@@ -88,14 +99,17 @@ internal object FailoverDnsBenchmark {
                         errors[reason] = (errors[reason] ?: 0) + 1
                     }
                 }
-                val sorted = latencies.sorted()
                 EndpointResult(
                     secondary = address,
                     successes = successes,
                     failures = failures,
-                    p50Us = percentile(sorted, 0.50),
-                    p95Us = percentile(sorted, 0.95),
-                    p99Us = percentile(sorted, 0.99),
+                    totalP50Us = percentile(totalLatencies.sorted(), 0.50),
+                    totalP95Us = percentile(totalLatencies.sorted(), 0.95),
+                    totalP99Us = percentile(totalLatencies.sorted(), 0.99),
+                    primaryP50Us = percentile(primaryLatencies.sorted(), 0.50),
+                    primaryP95Us = percentile(primaryLatencies.sorted(), 0.95),
+                    secondaryP50Us = percentile(secondaryLatencies.sorted(), 0.50),
+                    secondaryP95Us = percentile(secondaryLatencies.sorted(), 0.95),
                     errors = errors,
                 )
             }
@@ -109,9 +123,13 @@ internal object FailoverDnsBenchmark {
                   "attempts": $samples,
                   "secondary_successes": ${result.successes},
                   "failures": ${result.failures},
-                  "total_latency_p50_us": ${result.p50Us ?: "null"},
-                  "total_latency_p95_us": ${result.p95Us ?: "null"},
-                  "total_latency_p99_us": ${result.p99Us ?: "null"},
+                  "primary_attempt_p50_us": ${result.primaryP50Us ?: "null"},
+                  "primary_attempt_p95_us": ${result.primaryP95Us ?: "null"},
+                  "secondary_attempt_p50_us": ${result.secondaryP50Us ?: "null"},
+                  "secondary_attempt_p95_us": ${result.secondaryP95Us ?: "null"},
+                  "total_latency_p50_us": ${result.totalP50Us ?: "null"},
+                  "total_latency_p95_us": ${result.totalP95Us ?: "null"},
+                  "total_latency_p99_us": ${result.totalP99Us ?: "null"},
                   "errors": {$errorJson}
                 }
                 """.trimIndent()
@@ -160,7 +178,7 @@ internal object FailoverDnsBenchmark {
                 append("Cada intento fuerza timeout del primario local en ${primaryTimeoutMs} ms y luego prueba el DNS público secundario.\n")
                 results.forEach {
                     append("Secundario ${it.secondary}: ${it.successes}/$samples recuperaciones correctas, ${it.failures} fallidas")
-                    if (it.p50Us != null) append(" — latencia total P50 ${it.p50Us} µs, P95 ${it.p95Us} µs, P99 ${it.p99Us} µs")
+                    if (it.totalP50Us != null) append(" — primario P50 ${it.primaryP50Us} µs; secundario P50 ${it.secondaryP50Us} µs; total P50 ${it.totalP50Us} µs, P95 ${it.totalP95Us} µs, P99 ${it.totalP99Us} µs")
                     append("\n")
                 }
                 append("Alcance: valida failover real del motor hacia UDP/53, pero no VPN activa, TUN ni VpnService.protect().")
