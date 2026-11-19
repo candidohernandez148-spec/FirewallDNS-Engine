@@ -37,7 +37,11 @@ class DnsUpstreamFailoverClient(
         cancellation: DnsExchangeCancellation,
     ): DnsUpstreamResult = exchange(query, cancellation, null)
 
-    /** Optional observer; timing uses the monotonic clock and cannot affect DNS decisions. */
+    /**
+     * Optional observer; timing uses the monotonic clock and cannot affect DNS decisions.
+     * Each duration covers one complete client attempt, including socket protection,
+     * transport exchange, and response validation.
+     */
     fun exchange(
         query: ByteArray,
         cancellation: DnsExchangeCancellation,
