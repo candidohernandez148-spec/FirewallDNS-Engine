@@ -100,6 +100,12 @@ class DnsPolicyAdapterTest {
         assertEquals("dns_class_not_filtered", result.decision.reason)
     }
 
+    @Test fun rejectsQueryWithResponseCodeBitsSet() {
+        val packet = query("example.com")
+        packet[3] = 1
+        assertIs<DnsEvaluation.Rejected>(DnsPolicyAdapter(PolicyEngine()).evaluate(packet))
+    }
+
     @Test fun rejectsMultipleQuestionsAndUnsupportedRecords() {
         val packet = query("example.com")
         packet[5] = 2
