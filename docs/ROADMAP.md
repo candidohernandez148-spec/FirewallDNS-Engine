@@ -26,7 +26,7 @@
 - [x] Timeouts acotados, validación de respuestas y hook de protección de sockets.
 - [ ] Adaptador Android para conectar la protección de sockets con VpnService.protect.
 - [ ] Cancelación estructurada y pruebas contra resolvers reales.
-- [ ] Caché de respuestas DNS positiva/negativa con TTL (separada de la caché de decisiones).
+- [x] Caché acotada de respuestas DNS positivas/negativas con TTL, separada de la caché de decisiones; usa reloj monotónico, clave aislada por upstream/consulta, expiración y reescritura de ID/flags/TTL.
 - [ ] Medición DNS P50/P95/P99.
 
 ## Fase 3 — Inteligencia integrada y determinista

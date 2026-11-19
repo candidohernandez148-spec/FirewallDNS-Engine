@@ -46,7 +46,7 @@ data class DnsUpstreamConfig(
     }
 }
 
-enum class DnsUpstreamTransport { UDP, TCP }
+enum class DnsUpstreamTransport { UDP, TCP, CACHE }
 
 data class DnsUpstreamResponse(
     val message: ByteArray,
@@ -66,6 +66,8 @@ sealed interface DnsUpstreamResult {
 class DnsUpstreamClient(
     private val config: DnsUpstreamConfig,
     private val socketProtector: DnsSocketProtector,
+    private val responseCache: DnsResponseCache = DnsResponseCache(),
+    private val monotonicClockNanos: () -> Long = System::nanoTime,
 ) {
     private sealed interface UdpAttempt {
         data class Response(val bytes: ByteArray, val truncated: Boolean) : UdpAttempt
@@ -77,7 +79,11 @@ class DnsUpstreamClient(
             is DnsParseResult.Valid -> parsed.question
             is DnsParseResult.Invalid -> return DnsUpstreamResult.Failure(parsed.reason)
         }
-        return when (val udp = exchangeUdp(query, question)) {
+        val upstreamIdentity = "${config.host}:${config.port}"
+        responseCache.get(upstreamIdentity, query, monotonicClockNanos())?.let {
+            return DnsUpstreamResult.Success(it)
+        }
+        val result = when (val udp = exchangeUdp(query, question)) {
             is UdpAttempt.Failure -> DnsUpstreamResult.Failure(udp.reason)
             is UdpAttempt.Response -> if (udp.truncated) {
                 exchangeTcp(query, question)
@@ -85,6 +91,10 @@ class DnsUpstreamClient(
                 DnsUpstreamResult.Success(DnsUpstreamResponse(udp.bytes, DnsUpstreamTransport.UDP))
             }
         }
+        if (result is DnsUpstreamResult.Success) {
+            responseCache.put(upstreamIdentity, query, result.response.message, monotonicClockNanos())
+        }
+        return result
     }
 
     private fun exchangeUdp(query: ByteArray, question: DnsQuestion): UdpAttempt = try {

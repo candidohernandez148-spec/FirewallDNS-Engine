@@ -10,6 +10,39 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
 
 class DnsUpstreamClientTest {
+
+    @Test fun reusesCachedUpstreamAnswerAndRewritesTransactionId() {
+        DatagramSocket(0, InetAddress.getByName("127.0.0.1")).use { server ->
+            server.soTimeout = 2_000
+            val firstQuery = query("cache.example")
+            val responder = thread {
+                val incoming = DatagramPacket(ByteArray(512), 512)
+                server.receive(incoming)
+                val answer = positiveResponseFor(firstQuery)
+                server.send(DatagramPacket(answer, answer.size, incoming.socketAddress))
+            }
+            var nowNanos = 0L
+            val client = DnsUpstreamClient(
+                DnsUpstreamConfig("127.0.0.1", server.localPort, timeoutMillis = 2_000),
+                TestDnsSocketProtector,
+                DnsResponseCache(),
+                { nowNanos },
+            )
+            val first = assertIs<DnsUpstreamResult.Success>(client.exchange(firstQuery))
+            assertEquals(DnsUpstreamTransport.UDP, first.response.transport)
+            responder.join(2_000)
+
+            nowNanos = 1_000_000_000L
+            val secondQuery = query("cache.example").also {
+                it[0] = 0x56
+                it[1] = 0x78
+            }
+            val second = assertIs<DnsUpstreamResult.Success>(client.exchange(secondQuery))
+            assertEquals(DnsUpstreamTransport.CACHE, second.response.transport)
+            assertEquals(0x5678, u16(second.response.message, 0))
+        }
+    }
+
     @Test fun rejectsHostnameUpstreamToAvoidSystemResolverRecursion() {
         assertFailsWith<IllegalArgumentException> {
             DnsUpstreamConfig("dns.example.com")
@@ -242,6 +275,26 @@ class DnsUpstreamClientTest {
             it[5] = 1
             question.copyInto(it, 12)
         }
+    }
+
+
+    private fun positiveResponseFor(query: ByteArray): ByteArray {
+        val response = ByteArray(query.size + 16)
+        query.copyInto(response)
+        response[2] = 0x81.toByte()
+        response[3] = 0x80.toByte()
+        response[7] = 1
+        val offset = query.size
+        response[offset] = 0xc0.toByte()
+        response[offset + 1] = 0x0c
+        response[offset + 3] = 1
+        response[offset + 5] = 1
+        response[offset + 9] = 60
+        response[offset + 11] = 4
+        response[offset + 12] = 192.toByte()
+        response[offset + 14] = 2
+        response[offset + 15] = 1
+        return response
     }
 
     private fun responseFor(query: ByteArray): ByteArray =
