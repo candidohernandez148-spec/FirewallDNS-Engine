@@ -29,6 +29,7 @@ class EngineTunVpnService : VpnService() {
     @Volatile private var tun: ParcelFileDescriptor? = null
     @Volatile private var reader: Thread? = null
     @Volatile private var workers: ThreadPoolExecutor? = null
+    @Volatile private var activeRuntime: AndroidEngineRuntime? = null
     private val running = AtomicBoolean(false)
     private val packetsIn = AtomicLong()
     private val dnsProcessed = AtomicLong()
@@ -75,6 +76,7 @@ class EngineTunVpnService : VpnService() {
 
     private fun startDataPlane(descriptor: ParcelFileDescriptor) {
         val runtime = AndroidEngineRuntime(this)
+        activeRuntime = runtime
         val upstream = runtime.createDnsFailover(
             listOf(
                 DnsUpstreamConfig("1.1.1.1", timeoutMillis = 1_800, udpBufferBytes = 4_096),
@@ -137,13 +139,18 @@ class EngineTunVpnService : VpnService() {
     }
 
     private fun publish(state: String) {
+        val metrics = activeRuntime?.engine?.metrics()
         sendBroadcast(
             Intent(ACTION_STATUS).setPackage(packageName)
                 .putExtra(EXTRA_STATE, state)
                 .putExtra("packets_in", packetsIn.get())
                 .putExtra("dns_processed", dnsProcessed.get())
                 .putExtra("responses_out", responsesOut.get())
-                .putExtra("dropped", dropped.get()),
+                .putExtra("dropped", dropped.get())
+                .putExtra("blocked", metrics?.blocked ?: 0L)
+                .putExtra("observed", metrics?.observed ?: 0L)
+                .putExtra("allowed", metrics?.allowed ?: 0L)
+                .putExtra("rejected", metrics?.rejected ?: 0L),
         )
     }
 
@@ -190,6 +197,7 @@ class EngineTunVpnService : VpnService() {
         reader = null
         workers?.shutdownNow()
         workers = null
+        activeRuntime = null
         stopForeground(STOP_FOREGROUND_REMOVE)
     }
 
