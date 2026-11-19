@@ -78,6 +78,13 @@ Los umbrales numéricos se fijarán tras capturar línea base en hardware real; 
 - **Límite importante:** esta prueba usa un protector no-op deliberado. Mide el runtime Android, sockets loopback, cliente y caché; no mide `VpnService.protect()`, un túnel TUN activo, un resolutor público ni la radio Wi-Fi/datos. No es evidencia de ausencia de fugas o bucles VPN.
 - La medición real con VPN activa, comparación con Firestack, throughput, CPU, RAM, batería, pérdidas y pruebas de cambio de red siguen pendientes. Los resultados deben registrarse con modelo de dispositivo, versión Android, tipo de red, estado térmico/carga, commit y configuración.
 
+## Gestor experimental de flujos UDP protegidos
+
+- `AndroidUdpFlowManagerTest` verifica ida y vuelta UDP real sobre loopback, límite de flujos simultáneos, liberación de capacidad al cerrar un flujo, rechazo de datagramas vacíos/sobredimensionados y cierre del gestor.
+- La cola de salida se limita por flujo y el número de workers por el máximo de flujos configurado. Los contadores de enviados/recibidos/rechazados permiten observar presión y actividad.
+- El callback de recepción corre en el worker del flujo; debe copiar/encolar rápidamente y no realizar I/O bloqueante. El consumidor es responsable de cerrar el gestor al terminar la sesión.
+- Estas pruebas JVM no prueban `VpnService.protect()` real, TUN, smoltcp, Wi-Fi/datos ni ausencia de bucles/fugas. La integración Android aislada y la validación en Samsung A34 5G siguen pendientes.
+
 ## Adaptador Android de protección de sockets
 
 El módulo `:android-adapter` se valida en CI con `gradle test` y `gradle :android-adapter:assembleDebug`. Las pruebas unitarias verifican la delegación de sockets UDP y TCP a `VpnService.protect`, tanto cuando Android acepta la protección como cuando la rechaza. La validación en dispositivo real sigue pendiente: confirmar que los sockets upstream quedan fuera del TUN y que no hay bucles ni fugas DNS al alternar Wi-Fi/datos.
