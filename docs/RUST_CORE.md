@@ -24,6 +24,14 @@ La función devuelve:
 - No se utiliza todavía en la ruta de producción: la llamada JNI adicional debe justificarse con un benchmark A/B frente al parser Kotlin, no asumirse más rápida.
 - El primer artefacto Android se compila para arm64-v8a, ABI del Galaxy A34 5G. No implica cobertura de otros ABI.
 
+## Base de paquetes UDP no DNS (primera etapa)
+
+Se añade `udp_packet`, un decodificador puro que valida datagramas UDP IPv4/IPv6 completos y no fragmentados, comprueba longitudes y checksums, y expone direcciones, puertos y payload sin copiarlo. A diferencia del preflight DNS existente, acepta puertos de destino distintos de 53. Rechaza fragmentos IPv4 y cabeceras de extensión IPv6 hasta que el stack elegido gestione esos casos.
+
+Este cambio **no transporta ni reenvía tráfico**: no abre sockets, no llama a `VpnService.protect()`, no accede al TUN, no modifica `TunDnsPacketProcessor` ni cambia la ruta DNS de producción. Es la frontera de validación previa para la siguiente etapa, donde se probará el flujo UDP con el stack smoltcp y un adaptador de sockets protegidos. No debe conectarse a la VPN activa todavía.
+
+Pruebas añadidas: UDP no DNS por IPv4 e IPv6, checksum IPv4 opcional, checksum IPv6 obligatorio, puertos y payload, fragmentación, cabeceras de extensión, longitudes incorrectas, checksum corrupto y protocolo no UDP.
+
 ## Validación
 
 - `cargo test --manifest-path rust-core/Cargo.toml`: pruebas deterministas del parser Rust.

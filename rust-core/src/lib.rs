@@ -6,8 +6,10 @@
 //! justify a measured migration.
 
 mod tun_device;
+mod udp_packet;
 
 pub use tun_device::{TunPacketDevice, TunQueueError};
+pub use udp_packet::{parse_udp_packet, UdpDatagram, UdpPacketError};
 
 use jni::objects::{JByteArray, JObject};
 use jni::sys::jint;
