@@ -65,6 +65,25 @@ class ThreatAnalyzerTest {
         }
     }
 
+    @Test fun learnedIndicatorsCannotDirectlyBlockEvenAtHighConfidence() {
+        assertFailsWith<IllegalArgumentException> {
+            ThreatAnalyzer(
+                indicators = listOf(
+                    ThreatIndicator(
+                        id = "learned-high",
+                        domain = "learned.example",
+                        category = ThreatCategory.MALWARE,
+                        confidence = 99,
+                        action = PolicyAction.BLOCK,
+                        source = RuleSource.LEARNED,
+                        reason = "unverified_learned_signal",
+                    ),
+                ),
+                safeDomains = emptyList(),
+            )
+        }
+    }
+
     @Test fun indicatorCanBeScopedToExactDomain() {
         val custom = ThreatAnalyzer(
             indicators = listOf(
