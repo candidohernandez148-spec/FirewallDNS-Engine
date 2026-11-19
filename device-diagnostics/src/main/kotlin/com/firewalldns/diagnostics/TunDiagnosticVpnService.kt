@@ -58,19 +58,19 @@ class TunDiagnosticVpnService : VpnService() {
         val receivedAt = ConcurrentHashMap<Int, Long>()
         val sentAt = ConcurrentHashMap<Int, Long>()
         val completed = CountDownLatch(PROBE_COUNT)
-        val readerReady = CountDownLatch(1)
+        val warmupReceived = CountDownLatch(1)
 
         reader = thread(name = "firewalldns-diagnostic-tun-reader") {
             try {
                 FileInputStream(descriptor.fileDescriptor).use { input ->
                     val buffer = ByteArray(32767)
-                    // Wait until the TUN reader is ready before sending the first probe.
-                    readerReady.countDown()
                     while (running && completed.count > 0) {
                         val length = input.read(buffer)
                         if (length <= 0) continue
                         val probe = Ipv4UdpProbeParser.parse(buffer, length) ?: continue
-                        if (probe.sequence in 0 until PROBE_COUNT &&
+                        if (probe.sequence == WARMUP_SEQUENCE) {
+                            warmupReceived.countDown()
+                        } else if (probe.sequence in 0 until PROBE_COUNT &&
                             receivedAt.putIfAbsent(probe.sequence, System.nanoTime()) == null
                         ) {
                             completed.countDown()
@@ -84,9 +84,6 @@ class TunDiagnosticVpnService : VpnService() {
 
         thread(name = "firewalldns-diagnostic-tun-probes") {
             try {
-                if (!readerReady.await(READER_READY_TIMEOUT_MS, TimeUnit.MILLISECONDS)) {
-                    throw IllegalStateException("El lector TUN no quedó listo a tiempo")
-                }
                 val protectSocket = DatagramSocket(null)
                 val protectStarted = System.nanoTime()
                 val protectResult = try {
@@ -99,6 +96,22 @@ class TunDiagnosticVpnService : VpnService() {
                 var sendErrors = 0
                 val destination = InetAddress.getByName("198.18.0.1")
                 DatagramSocket().use { socket ->
+                    // A real packet round-trip into the TUN proves the reader is active;
+                    // a thread-start latch alone does not prove the fd is being drained.
+                    val warmupPayload = ByteArray(8)
+                    writeInt(warmupPayload, 0, Ipv4UdpProbeParser.MAGIC)
+                    writeInt(warmupPayload, 4, WARMUP_SEQUENCE)
+                    socket.send(
+                        DatagramPacket(
+                            warmupPayload,
+                            warmupPayload.size,
+                            destination,
+                            Ipv4UdpProbeParser.DESTINATION_PORT,
+                        ),
+                    )
+                    if (!warmupReceived.await(READER_READY_TIMEOUT_MS, TimeUnit.MILLISECONDS)) {
+                        throw IllegalStateException("El paquete de sincronización no llegó al TUN")
+                    }
                     repeat(PROBE_COUNT) { sequence ->
                         val payload = ByteArray(8)
                         writeInt(payload, 0, Ipv4UdpProbeParser.MAGIC)
@@ -270,6 +283,7 @@ class TunDiagnosticVpnService : VpnService() {
         const val EXTRA_REPORT = "report_json"
         private const val NOTIFICATION_ID = 7731
         private const val PROBE_COUNT = 100
+        private const val WARMUP_SEQUENCE = PROBE_COUNT
         private const val PROBE_INTERVAL_MS = 8L
         private const val PROBE_TIMEOUT_MS = 8_000L
         private const val READER_READY_TIMEOUT_MS = 2_000L
