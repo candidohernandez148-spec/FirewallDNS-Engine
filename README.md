@@ -2,12 +2,13 @@
 
 Motor independiente de filtrado y protección de red para Android. Este repositorio se desarrolla separado de [FirewallDNS](https://github.com/candidohernandez148-spec/FirewallDNS) y no modifica ni sustituye su implementación actual.
 
-> Estado: **prototipo Kotlin/JVM en desarrollo**. El núcleo de políticas, un adaptador DNS inicial y una primera capa de inteligencia local ya están implementados en una rama de trabajo. Todavía no es un motor listo para proteger tráfico real.
+> Estado: **prototipo Kotlin/JVM en desarrollo**. El núcleo de políticas, un adaptador DNS inicial, inteligencia local y monitorización acotada ya están implementados en una rama de trabajo. Todavía no es un motor listo para proteger tráfico real.
 
 ## Componentes implementados en la rama de trabajo
 - `engine-core`: reglas BLOCK / OBSERVE / ALLOW, normalización IDN y etiquetas DNS de servicio, reglas por aplicación, prioridades, caducidad y snapshots atómicos con revisión.
 - `dns-engine`: parser estricto de consultas DNS de una pregunta, validación EDNS(0), NXDOMAIN sintético, framing DNS-over-TCP y caché acotada de decisiones con TTL y revisión de políticas.
-- `threat-engine`: indicadores locales iniciales de publicidad y tracking, allowlist de dominios esenciales y heurísticas conservadoras que solo generan OBSERVE. Los indicadores confiables seleccionados pueden sugerir BLOCK.
+- `threat-engine`: indicadores locales iniciales de publicidad y tracking, allowlist de dominios esenciales y heurísticas conservadoras que solo generan OBSERVE.
+- `engine-monitor`: métricas locales y cola de eventos acotada, sin I/O en la ruta crítica y con dominios/paquetes redactados por defecto.
 
 El parser DNS acepta consultas de una pregunta y, opcionalmente, un único registro EDNS(0) OPT. El codec TCP solo gestiona el prefijo de longitud; todavía no implementa sockets UDP/TCP, reenvío upstream, gestión de flujos, fragmentación ni integración VPN. La inteligencia de amenazas es una base local inicial, no un feed exhaustivo de malware/phishing ni una garantía de detección. Los tipos de registro se filtran por nombre de dominio, no se interpretan sus RDATA.
 
@@ -16,6 +17,7 @@ El parser DNS acepta consultas de una pregunta y, opcionalmente, un único regis
 - Procesamiento local por defecto, sin telemetría externa.
 - OBSERVE permite el tráfico; las heurísticas débiles nunca bloquean.
 - Reglas explícitas del usuario prevalecen sobre la inteligencia automática.
+- Monitorización con cola limitada y datos sensibles desactivados por defecto.
 - No se reimplementará TCP/IP desde cero sin evidencia y benchmark.
 - No se sustituirá Firestack ni se integrará en FirewallDNS hasta superar pruebas funcionales, seguridad y rendimiento en hardware real.
 
