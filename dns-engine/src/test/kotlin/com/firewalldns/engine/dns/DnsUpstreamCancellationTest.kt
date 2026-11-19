@@ -52,7 +52,7 @@ class DnsUpstreamCancellationTest {
             tcpServer.soTimeout = 2_000
             DatagramSocket(tcpServer.localPort, InetAddress.getByName("127.0.0.1")).use { udpServer ->
                 udpServer.soTimeout = 2_000
-                val tcpAccepted = CountDownLatch(1)
+                val tcpRequestRead = CountDownLatch(1)
                 val udpThread = thread {
                     val packet = DatagramPacket(ByteArray(512), 512)
                     udpServer.receive(packet)
@@ -62,10 +62,13 @@ class DnsUpstreamCancellationTest {
                     udpServer.send(DatagramPacket(truncated, truncated.size, packet.socketAddress))
                 }
                 val tcpThread = thread {
-                    tcpServer.accept().use {
-                        tcpAccepted.countDown()
-                        // Deliberately withhold the DNS response until the client is cancelled.
-                        Thread.sleep(3_000)
+                    tcpServer.accept().use { accepted ->
+                        val input = java.io.DataInputStream(accepted.getInputStream())
+                        val frameLength = input.readUnsignedShort()
+                        input.readFully(ByteArray(frameLength))
+                        tcpRequestRead.countDown()
+                        // Wait until cancellation closes the client socket.
+                        input.read()
                     }
                 }
                 val cancellation = DnsExchangeCancellation()
@@ -79,7 +82,7 @@ class DnsUpstreamCancellationTest {
                     )
                 }
 
-                assertTrue(tcpAccepted.await(2, TimeUnit.SECONDS), "TCP fallback did not connect")
+                assertTrue(tcpRequestRead.await(2, TimeUnit.SECONDS), "TCP fallback did not send its query")
                 cancellation.cancel()
                 clientThread.join(2_000)
                 udpThread.join(2_000)
