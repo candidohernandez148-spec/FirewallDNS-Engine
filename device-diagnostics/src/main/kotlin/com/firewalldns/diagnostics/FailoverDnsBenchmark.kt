@@ -185,7 +185,7 @@ internal object FailoverDnsBenchmark {
             question.copyInto(it, 12)
         }
     }
-
+    private fun json(value: String): String =
         "\"" + value.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n") + "\""
         "\"" + value.replace("\\\\", "\\\\\\\\").replace("\"", "\\\\"").replace("\n", "\n") + "\""
 
