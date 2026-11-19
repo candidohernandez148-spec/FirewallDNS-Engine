@@ -1,5 +1,6 @@
 package com.firewalldns.engine.dns
 
+import com.firewalldns.engine.core.DomainNormalizer
 import com.firewalldns.engine.core.PolicyAction
 import com.firewalldns.engine.core.PolicyDecision
 import com.firewalldns.engine.core.PolicyEngine
@@ -18,8 +19,10 @@ class DnsPolicyAdapter(private val policyEngine: PolicyEngine) {
             is DnsParseResult.Valid -> parsed.question
             is DnsParseResult.Invalid -> return DnsEvaluation.Rejected(parsed.reason)
         }
+        val normalizedDomain = DomainNormalizer.normalize(question.domain)
+            ?: return DnsEvaluation.Rejected("dns_qname_invalid_hostname")
         val decision = policyEngine.evaluate(
-            PolicyRequest(question.domain, appPackage),
+            PolicyRequest(normalizedDomain, appPackage),
             nowEpochMillis,
         )
         return when (decision.action) {
