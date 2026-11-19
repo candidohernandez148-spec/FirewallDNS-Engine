@@ -25,7 +25,7 @@ Construir un motor de filtrado y protección de red para Android, desacoplado de
 | fast-cache | Cachés concurrentes con TTL y límites |
 | engine-monitor | Métricas, eventos y diagnóstico no bloqueante |
 
-Los nombres son límites lógicos iniciales; se convertirán en módulos Gradle cuando código y dependencias lo justifiquen.
+Los límites implementados son módulos Gradle. `engine-runtime` expone una fachada única para que Android no tenga que coordinar directamente varios módulos internos.
 
 ## Flujo de decisión
 1. El adaptador recibe una consulta DNS o metadatos de flujo.
