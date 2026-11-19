@@ -99,6 +99,7 @@ class AndroidUdpFlowManager(
         val snapshot = synchronized(lock) { flows.values.toList() }
         snapshot.forEach { it.close() }
         executor.shutdownNow()
+        flows.clear()
     }
 
     private inner class Flow(
@@ -127,7 +128,6 @@ class AndroidUdpFlowManager(
             if (!active.compareAndSet(true, false)) return
             outbound.clear()
             closeSocket()
-            flows.remove(id, this)
         }
 
         fun closeSocket() {
