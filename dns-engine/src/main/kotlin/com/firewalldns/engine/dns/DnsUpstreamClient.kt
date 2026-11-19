@@ -144,7 +144,7 @@ class DnsUpstreamClient(
         if (u16(response, 0) != question.id) return "dns_upstream_transaction_id_mismatch"
         val responseFlags = flags(response)
         if (responseFlags and FLAG_RESPONSE == 0) return "dns_upstream_packet_is_not_response"
-        if (responseFlags and OPCODE_MASK != question.requestFlags and OPCODE_MASK) {
+        if ((responseFlags and OPCODE_MASK) != (question.requestFlags and OPCODE_MASK)) {
             return "dns_upstream_opcode_mismatch"
         }
         if (u16(response, 4) != 1) return "dns_upstream_question_count_unsupported"
