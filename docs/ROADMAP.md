@@ -24,7 +24,7 @@
 - [x] Fuzzing y suite ampliada de mensajes malformados.
 - [x] Transporte DNS upstream UDP con fallback TCP ante respuestas truncadas.
 - [x] Timeouts acotados, validación de respuestas y hook de protección de sockets.
-- [ ] Adaptador Android para conectar la protección de sockets con VpnService.protect.
+- [x] Adaptador Android aislado para conectar la protección de sockets con VpnService.protect (sin integración en el servicio VPN actual).
 - [x] Cancelación estructurada por intercambio: cierre del socket activo durante UDP/TCP; pruebas locales de cancelación.
 - [x] Caché acotada de respuestas DNS positivas/negativas con TTL, separada de la caché de decisiones; usa reloj monotónico, clave aislada por upstream/consulta/EDNS/CD, límites de entradas/bytes y reescritura de ID/flags/TTL.
 - [ ] Medición DNS P50/P95/P99.
