@@ -139,6 +139,7 @@ class DnsUpstreamClientTest {
 
                 val result = DnsUpstreamClient(
                     DnsUpstreamConfig("127.0.0.1", tcpServer.localPort, timeoutMillis = 2_000),
+                    NoOpDnsSocketProtector,
                 ).exchange(query)
 
                 udpResponder.join(2_000)
