@@ -13,11 +13,12 @@ import java.net.SocketTimeoutException
 
 /** Socket protection hook implemented by the Android VpnService adapter. */
 interface DnsSocketProtector {
-    fun protect(socket: DatagramSocket): Boolean = true
-    fun protect(socket: Socket): Boolean = true
-}
+    /** Must call VpnService.protect(socket) on Android before connect(). */
+    fun protect(socket: DatagramSocket): Boolean
 
-object NoOpDnsSocketProtector : DnsSocketProtector
+    /** Must call VpnService.protect(socket) on Android before connect(). */
+    fun protect(socket: Socket): Boolean
+}
 
 data class DnsUpstreamConfig(
     val host: String,
