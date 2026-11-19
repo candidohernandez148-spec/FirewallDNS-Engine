@@ -2,7 +2,9 @@ package com.firewalldns.engine.core
 
 /** OBSERVE records a signal but does not block the request. */
 enum class PolicyAction { BLOCK, OBSERVE, ALLOW }
-enum class RuleSource(val precedence: Int) { LEARNED(1), BUILTIN(2), MANAGED(3), USER(4) }
+
+/** Provenance of a policy or threat signal; HEURISTIC is computed, never learned from traffic. */
+enum class RuleSource(val precedence: Int) { HEURISTIC(1), BUILTIN(2), MANAGED(3), USER(4) }
 
 data class PolicyRule(
     val id: String,
