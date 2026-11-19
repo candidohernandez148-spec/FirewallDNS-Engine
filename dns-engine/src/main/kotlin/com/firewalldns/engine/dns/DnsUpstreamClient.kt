@@ -5,6 +5,8 @@ import java.io.EOFException
 import java.io.IOException
 import java.net.DatagramPacket
 import java.net.DatagramSocket
+import java.net.Inet6Address
+import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.net.Socket
 import java.net.SocketTimeoutException
@@ -24,10 +26,22 @@ data class DnsUpstreamConfig(
     val udpBufferBytes: Int = 4_096,
 ) {
     init {
-        require(host.isNotBlank()) { "DNS upstream host must not be blank" }
+        require(isNumericAddress(host)) { "DNS upstream host must be a numeric IPv4 or IPv6 address" }
         require(port in 1..65_535) { "DNS upstream port is invalid" }
         require(timeoutMillis > 0) { "DNS timeout must be positive" }
         require(udpBufferBytes in 512..65_535) { "DNS UDP buffer size is invalid" }
+    }
+
+    private fun isNumericAddress(value: String): Boolean {
+        if (value.contains(':')) {
+            if (!value.matches(Regex("[0-9A-Fa-f:.]+"))) return false
+            return runCatching { InetAddress.getByName(value) is Inet6Address }.getOrDefault(false)
+        }
+        val octets = value.split('.')
+        return octets.size == 4 && octets.all { octet ->
+            octet.isNotEmpty() && (octet == "0" || !octet.startsWith('0')) &&
+                octet.toIntOrNull()?.let { it in 0..255 } == true
+        }
     }
 }
 
