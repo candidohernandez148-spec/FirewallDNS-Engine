@@ -137,16 +137,20 @@ class EngineTunVpnService : VpnService() {
                         val packet = buffer.copyOf(length)
                         try {
                             pool.execute {
+                                var processorThrew = false
                                 val response = try {
                                     processor.process(packet)
                                 } catch (_: Throwable) {
+                                    processorThrew = true
                                     processorFailed.incrementAndGet()
                                     null
                                 }
                                 if (response == null) {
-                                    // Includes unsupported/malformed packets and processor-level rejection.
-                                    if (running.get()) processorNoResponse.incrementAndGet()
-                                    else stoppedBeforeResponse.incrementAndGet()
+                                    // A thrown exception is counted only as processor_failed.
+                                    if (!processorThrew) {
+                                        if (running.get()) processorNoResponse.incrementAndGet()
+                                        else stoppedBeforeResponse.incrementAndGet()
+                                    }
                                     return@execute
                                 }
                                 processorReturnedResponse.incrementAndGet()
