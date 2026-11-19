@@ -63,7 +63,6 @@ class PolicyEngine(initialRules: Collection<PolicyRule> = emptyList()) {
     private data class CompiledRule(
         val rule: PolicyRule,
         val normalizedDomain: String,
-        val specificity: Int,
     ) {
         fun matches(domain: String): Boolean =
             if (rule.includeSubdomains) domain == normalizedDomain || domain.endsWith(".$normalizedDomain")
@@ -86,16 +85,14 @@ class PolicyEngine(initialRules: Collection<PolicyRule> = emptyList()) {
                     "Invalid Android package name in policy rule '${rule.id}'"
                 }
             }
-            CompiledRule(
-                rule,
-                normalizedDomain,
-                (if (rule.includeSubdomains) 0 else 1) + (if (rule.appPackage != null) 1 else 0),
-            )
+            CompiledRule(rule, normalizedDomain)
         }
         return compiled.sortedWith(
             compareByDescending<CompiledRule> { it.rule.priority }
                 .thenByDescending { it.rule.source.precedence }
-                .thenByDescending { it.specificity }
+                .thenByDescending { it.normalizedDomain.length }
+                .thenByDescending { !it.rule.includeSubdomains }
+                .thenByDescending { it.rule.appPackage != null }
                 .thenBy { it.rule.id },
         )
     }
