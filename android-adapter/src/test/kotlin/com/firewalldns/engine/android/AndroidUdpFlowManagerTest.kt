@@ -117,6 +117,22 @@ class AndroidUdpFlowManagerTest {
         }
     }
 
+    @Test
+    fun rejectsQueueConfigurationThatExceedsAggregateMemoryBudget() {
+        val protector = object : DnsSocketProtector {
+            override fun protect(socket: DatagramSocket): Boolean = true
+            override fun protect(socket: Socket): Boolean = true
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            AndroidUdpFlowManager(
+                socketFactory = AndroidProtectedUdpSocketFactory(protector),
+                maxFlows = 128,
+                maxQueuedDatagramsPerFlow = 256,
+                maxDatagramBytes = 65_507,
+            )
+        }
+    }
+
     private fun newManager(
         maxFlows: Int,
         maxDatagramBytes: Int = 1_024,
