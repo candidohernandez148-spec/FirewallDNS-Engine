@@ -93,11 +93,29 @@ class NativePacketCoreInstrumentedTest {
         )
     }
 
-    private fun percentileMicros(values: LongArray, percentile: Int): Long {
+    private fun percentileMicros(values: LongArray, percentile: Int): Long =
+        percentileNearestRank(values, percentile) / 1_000L
+
+    /**
+     * Nearest-rank percentile: rank = ceil(percentile * N / 100).
+     * Kept in nanoseconds so the rank calculation can be tested without
+     * losing precision to the microsecond conversion used in benchmark logs.
+     */
+    internal fun percentileNearestRank(values: LongArray, percentile: Int): Long {
+        require(values.isNotEmpty()) { "At least one sample is required" }
+        require(percentile in 1..100) { "Percentile must be between 1 and 100" }
         val sorted = values.sortedArray()
-        val index = (((percentile / 100.0) * sorted.size).toInt() - 1)
-            .coerceIn(0, sorted.lastIndex)
-        return sorted[index] / 1_000L
+        val rank = (percentile * sorted.size + 99) / 100
+        return sorted[rank - 1]
+    }
+
+    @Test
+    fun percentileUsesNearestRankForP50P95AndP99() {
+        val samples = LongArray(100) { (it + 1).toLong() }
+        assertEquals(50L, percentileNearestRank(samples, 50))
+        assertEquals(95L, percentileNearestRank(samples, 95))
+        assertEquals(99L, percentileNearestRank(samples, 99))
+        assertEquals(100L, percentileNearestRank(samples, 100))
     }
 
     /** Test-only Kotlin baseline matching rust-core's current validation contract. */
