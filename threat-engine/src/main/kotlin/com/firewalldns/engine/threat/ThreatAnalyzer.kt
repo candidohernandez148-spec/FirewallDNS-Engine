@@ -26,8 +26,8 @@ class ThreatAnalyzer(
             require(indicator.reason.isNotBlank()) { "Threat indicator reason must not be blank" }
             require(indicator.confidence in 0..100) { "Threat confidence must be between 0 and 100" }
             require(indicator.action != PolicyAction.BLOCK ||
-                (indicator.confidence >= MIN_TRUSTED_BLOCK_CONFIDENCE && indicator.source != RuleSource.LEARNED)) {
-                "Blocking indicators require high confidence"
+                (indicator.confidence >= MIN_TRUSTED_BLOCK_CONFIDENCE && indicator.source != RuleSource.HEURISTIC)) {
+                "Blocking indicators require high-confidence curated provenance"
             }
             CompiledIndicator(
                 indicator,
@@ -104,7 +104,7 @@ class ThreatAnalyzer(
                         category = ThreatCategory.ADVERTISING,
                         confidence = 35,
                         evidence = "domain_label_contains_advertising_term",
-                        source = RuleSource.LEARNED,
+                        source = RuleSource.HEURISTIC,
                     ),
                 )
             }
@@ -118,7 +118,7 @@ class ThreatAnalyzer(
                         category = ThreatCategory.TRACKING,
                         confidence = 30,
                         evidence = "domain_label_contains_tracking_term",
-                        source = RuleSource.LEARNED,
+                        source = RuleSource.HEURISTIC,
                     ),
                 )
             }
@@ -141,7 +141,7 @@ class ThreatAnalyzer(
             riskScore = signals.sumOf { it.confidence }.coerceAtMost(100),
             confidence = strongest.confidence,
             reason = "heuristic_signals_require_observation",
-            source = RuleSource.LEARNED,
+            source = RuleSource.HEURISTIC,
             signals = signals,
         )
     }
