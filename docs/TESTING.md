@@ -21,6 +21,14 @@
 - Estas pruebas son smoke-fuzzers reproducibles; no sustituyen fuzzing guiado por cobertura, sanitización ni campañas prolongadas.
 - Ejecutar la suite en CI y registrar semilla/iteración si aparece una regresión para convertir el caso en fixture permanente. Resolver reales y cancelación estructurada siguen pendientes.
 
+
+### Resolutores DNS reales (integración optativa)
+- `DnsLiveResolverIntegrationTest` consulta `example.com` directamente por UDP a Cloudflare (1.1.1.1), Google Public DNS (8.8.8.8) y Quad9 (9.9.9.9), validando respuesta, RCODE y pregunta.
+- Estas pruebas no se ejecutan en la suite normal. Para ejecutarlas manualmente: `FIREWALLDNS_RUN_LIVE_DNS_TESTS=true gradle :dns-engine:test --tests "*DnsLiveResolverIntegrationTest"`.
+- El workflow `DNS Live Resolver Checks` permite lanzarlas desde GitHub Actions → Actions → DNS Live Resolver Checks → Run workflow.
+- Requieren salida de red UDP/TCP 53. Un fallo por bloqueo de red debe distinguirse de un fallo del parser o del protocolo.
+- El fallback TCP continúa cubierto con servidor local determinista; no se fuerza una condición de truncamiento en los resolutores públicos.
+
 ## Matriz mínima
 - Samsung Galaxy A34 5G como dispositivo de referencia.
 - Android mínimo soportado y versión Android reciente.
