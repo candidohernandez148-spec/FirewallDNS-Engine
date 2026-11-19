@@ -15,7 +15,7 @@ class DnsPolicyAdapterTest {
         val adapter = DnsPolicyAdapter(PolicyEngine(listOf(rule("ads.example.com", PolicyAction.BLOCK))))
         val result = assertIs<DnsEvaluation.Blocked>(adapter.evaluate(request))
         assertEquals(0x1234, u16(result.response, 0))
-        assertEquals(0x8003, u16(result.response, 2))
+        assertEquals(0x8103, u16(result.response, 2)) // QR + preserved RD + NXDOMAIN
         assertEquals(1, u16(result.response, 4))
         assertContentEquals(request.copyOfRange(12, request.size), result.response.copyOfRange(12, result.response.size))
     }
