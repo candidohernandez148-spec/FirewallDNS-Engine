@@ -50,6 +50,12 @@ class PublicDnsActivity : Activity() {
             val processed = intent.getLongExtra("dns_processed", 0)
             val sent = intent.getLongExtra("responses_out", 0)
             val dropped = intent.getLongExtra("dropped", 0)
+            val processorReturned = intent.getLongExtra("processor_returned_response", 0)
+            val processorNoResponse = intent.getLongExtra("processor_no_response", 0)
+            val processorFailed = intent.getLongExtra("processor_failed", 0)
+            val queueRejected = intent.getLongExtra("queue_rejected", 0)
+            val responseWriteFailed = intent.getLongExtra("response_write_failed", 0)
+            val stoppedBeforeResponse = intent.getLongExtra("stopped_before_response", 0)
             val blocked = intent.getLongExtra("blocked", 0)
             val observed = intent.getLongExtra("observed", 0)
             val allowed = intent.getLongExtra("allowed", 0)
@@ -59,13 +65,19 @@ class PublicDnsActivity : Activity() {
             val durationMs = (updatedAt - startedAt).coerceAtLeast(0L)
             engineTunReport = """{
   "format": "firewalldns-engine-tun-diagnostic",
-  "schema_version": 1,
+  "schema_version": 2,
   "state": "$state",
   "duration_ms": $durationMs,
   "metrics": {
     "packets_in": $packets,
     "dns_processed": $processed,
     "responses_out": $sent,
+    "processor_returned_response": $processorReturned,
+    "processor_no_response": $processorNoResponse,
+    "processor_failed": $processorFailed,
+    "queue_rejected": $queueRejected,
+    "response_write_failed": $responseWriteFailed,
+    "stopped_before_response": $stoppedBeforeResponse,
     "blocked": $blocked,
     "observed": $observed,
     "allowed": $allowed,
@@ -79,7 +91,7 @@ class PublicDnsActivity : Activity() {
   "updated_at_elapsed_ms": $updatedAt
 }"""
             report = engineTunReport
-            status.text = "Motor propio en TUN: $state\nPaquetes recibidos: $packets\nDNS procesados: $processed\nRespuestas enviadas: $sent\nBLOCK: $blocked | OBSERVE: $observed | ALLOW: $allowed\nRechazados: $rejected\nDescartados: $dropped\nDuración: ${durationMs / 1000}s\n\nPulsa «Guardar informe JSON» para exportar estos datos. Se actualizan cada 0,5 segundos.\n\nSolo se enruta al túnel el DNS dirigido a sus direcciones virtuales; no es un firewall de todo el tráfico."
+            status.text = "Motor propio en TUN: $state\nPaquetes recibidos: $packets\nRespuestas procesadas: $processed\nRespuestas enviadas: $sent\nProcesador con respuesta: $processorReturned | Sin respuesta: $processorNoResponse | Excepción: $processorFailed\nCola saturada: $queueRejected | Error al escribir: $responseWriteFailed | Detenidos antes de responder: $stoppedBeforeResponse\nBLOCK: $blocked | OBSERVE: $observed | ALLOW: $allowed\nRechazados: $rejected\nDescartados (suma de causas): $dropped\nDuración: ${durationMs / 1000}s\n\nPulsa «Guardar informe JSON» para exportar estos datos. Se actualizan cada 0,5 segundos.\n\nSolo se enruta al túnel el DNS dirigido a sus direcciones virtuales; no es un firewall de todo el tráfico."
             exportButton.isEnabled = true
             engineTunButton.isEnabled = state != "running" && state != "starting"
             stopEngineTunButton.isEnabled = state == "running" || state == "starting" || state == "stopping"

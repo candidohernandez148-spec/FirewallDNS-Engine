@@ -37,8 +37,17 @@ class EngineTunVpnService : VpnService() {
     private val running = AtomicBoolean(false)
     private val packetsIn = AtomicLong()
     private val dnsProcessed = AtomicLong()
-    private val dropped = AtomicLong()
+    private val processorReturnedResponse = AtomicLong()
+    private val processorNoResponse = AtomicLong()
+    private val processorFailed = AtomicLong()
+    private val queueRejected = AtomicLong()
+    private val responseWriteFailed = AtomicLong()
+    private val stoppedBeforeResponse = AtomicLong()
     private val responsesOut = AtomicLong()
+
+    private fun droppedCount(): Long =
+        processorNoResponse.get() + processorFailed.get() + queueRejected.get() +
+            responseWriteFailed.get() + stoppedBeforeResponse.get()
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == ACTION_STOP) {
@@ -54,7 +63,12 @@ class EngineTunVpnService : VpnService() {
         }
         packetsIn.set(0)
         dnsProcessed.set(0)
-        dropped.set(0)
+        processorReturnedResponse.set(0)
+        processorNoResponse.set(0)
+        processorFailed.set(0)
+        queueRejected.set(0)
+        responseWriteFailed.set(0)
+        stoppedBeforeResponse.set(0)
         responsesOut.set(0)
         startForeground(NOTIFICATION_ID, notification())
         try {
@@ -123,24 +137,36 @@ class EngineTunVpnService : VpnService() {
                         val packet = buffer.copyOf(length)
                         try {
                             pool.execute {
-                                val response = try { processor.process(packet) } catch (_: Throwable) { null }
-                                if (response != null && running.get()) {
-                                    try {
-                                        synchronized(output) {
-                                            output.write(response)
-                                            output.flush()
-                                        }
-                                        responsesOut.incrementAndGet()
-                                        dnsProcessed.incrementAndGet()
-                                    } catch (_: Throwable) {
-                                        dropped.incrementAndGet()
+                                val response = try {
+                                    processor.process(packet)
+                                } catch (_: Throwable) {
+                                    processorFailed.incrementAndGet()
+                                    null
+                                }
+                                if (response == null) {
+                                    // Includes unsupported/malformed packets and processor-level rejection.
+                                    if (running.get()) processorNoResponse.incrementAndGet()
+                                    else stoppedBeforeResponse.incrementAndGet()
+                                    return@execute
+                                }
+                                processorReturnedResponse.incrementAndGet()
+                                if (!running.get()) {
+                                    stoppedBeforeResponse.incrementAndGet()
+                                    return@execute
+                                }
+                                try {
+                                    synchronized(output) {
+                                        output.write(response)
+                                        output.flush()
                                     }
-                                } else {
-                                    dropped.incrementAndGet()
+                                    responsesOut.incrementAndGet()
+                                    dnsProcessed.incrementAndGet()
+                                } catch (_: Throwable) {
+                                    responseWriteFailed.incrementAndGet()
                                 }
                             }
                         } catch (_: java.util.concurrent.RejectedExecutionException) {
-                            dropped.incrementAndGet()
+                            queueRejected.incrementAndGet()
                         }
                     }
                 }
@@ -148,7 +174,6 @@ class EngineTunVpnService : VpnService() {
                 // Closing the TUN descriptor releases the blocking read on teardown.
             } finally {
                 try { output.close() } catch (_: Throwable) {}
-                publish("engine_dns_tun_stopped")
             }
         }
     }
@@ -170,7 +195,13 @@ class EngineTunVpnService : VpnService() {
                 .putExtra("packets_in", packetsIn.get())
                 .putExtra("dns_processed", dnsProcessed.get())
                 .putExtra("responses_out", responsesOut.get())
-                .putExtra("dropped", dropped.get())
+                .putExtra("dropped", droppedCount())
+                .putExtra("processor_returned_response", processorReturnedResponse.get())
+                .putExtra("processor_no_response", processorNoResponse.get())
+                .putExtra("processor_failed", processorFailed.get())
+                .putExtra("queue_rejected", queueRejected.get())
+                .putExtra("response_write_failed", responseWriteFailed.get())
+                .putExtra("stopped_before_response", stoppedBeforeResponse.get())
                 .putExtra("blocked", metrics?.blocked ?: 0L)
                 .putExtra("observed", metrics?.observed ?: 0L)
                 .putExtra("allowed", metrics?.allowed ?: 0L)
@@ -230,7 +261,8 @@ class EngineTunVpnService : VpnService() {
         try { descriptor?.close() } catch (_: Throwable) {}
         reader?.interrupt()
         reader = null
-        workers?.shutdownNow()
+        val abandoned = workers?.shutdownNow().orEmpty()
+        if (abandoned.isNotEmpty()) stoppedBeforeResponse.addAndGet(abandoned.size.toLong())
         workers = null
         serviceState = "stopped"
         // Publish final counters before releasing the runtime so the Activity can export them.

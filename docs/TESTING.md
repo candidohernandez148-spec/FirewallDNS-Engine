@@ -94,3 +94,13 @@ El módulo `:android-adapter` se valida en CI con `gradle test` y `gradle :andro
 - El APK independiente `:device-diagnostics` contiene `EngineTunVpnService`. Usa direcciones DNS virtuales y rutas /32 y /128, lector TUN, cola acotada de 256 paquetes, cuatro trabajadores y upstreams protegidos por `VpnService.protect()`.
 - La ejecución en CI compila el servicio y genera el APK, pero no sustituye la prueba en el Samsung A34 5G. En el dispositivo hay que confirmar que el contador de paquetes aumenta, que se reciben respuestas DNS, que BLOCK no llega al upstream, que OBSERVE sí reenvía, y que al detener el servicio se recupera el DNS normal.
 - Alcance actual: UDP DNS sobre IPv4 sin fragmentación y IPv6 sin cabeceras de extensión. DNS-over-TCP desde el cliente, fragmentos, DoT/DoH, atribución por UID y tráfico IP ajeno a DNS no están cubiertos. No activar como VPN general ni retirar Firestack en FirewallDNS con esta evidencia.
+
+
+## Diagnóstico TUN real: informe JSON v2
+
+- El informe v2 desglosa los descartes mutuamente excluyentes en `processor_no_response`, `processor_failed`, `queue_rejected`, `response_write_failed` y `stopped_before_response`. `dropped` es la suma de esas causas; no debe interpretarse como cantidad de consultas DNS inválidas sin revisar el desglose.
+- `processor_returned_response` cuenta respuestas completas devueltas por el procesador, antes de intentar escribirlas en TUN. `responses_out` y el alias histórico `dns_processed` solo aumentan después de escribir y hacer flush correctamente.
+- `packets_in` cuenta todos los paquetes leídos desde TUN, no solo DNS válido. Paquetes no compatibles o malformados pueden terminar en `processor_no_response`.
+- Los contadores BLOCK/OBSERVE/ALLOW/REJECTED pertenecen al monitor del runtime y representan evaluaciones de política; no se deben sumar ni comparar directamente con `responses_out`. Una evaluación puede no producir respuesta (por ejemplo, rechazo) y una respuesta puede fallar después en el transporte.
+- El informe no registra dominios, direcciones, consultas ni payloads. Repetir la prueba durante 15 minutos (900 s), detener desde la pantalla y guardar el JSON final. Confirmar manualmente que el estado sea `stopped`, que el archivo incluya `schema_version: 2` y que el contador de duración se aproxime al tiempo real.
+- Limitación: los contadores son instantáneas concurrentes; durante una parada abrupta pueden quedar tareas en ejecución al emitirse el último broadcast. No usar aún el informe para declarar cero pérdidas ni para aprobar integración de producción. La validación de cierre consistente y la prueba física de 15 minutos siguen siendo obligatorias.
