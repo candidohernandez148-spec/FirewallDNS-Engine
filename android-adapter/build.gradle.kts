@@ -26,4 +26,6 @@ dependencies {
     api(project(":dns-engine"))
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.mockito:mockito-core:5.15.2")
+    androidTestImplementation("androidx.test:runner:1.6.2")
+    androidTestImplementation("androidx.test.ext:junit:1.2.1")
 }
