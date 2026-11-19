@@ -24,3 +24,12 @@ jobs:
         run: gradle :android-adapter:assembleDebug
       - name: Compile Android on-device benchmark tests
         run: gradle :android-adapter:assembleDebugAndroidTest
+      - name: Build installable device diagnostics APK
+        run: gradle :device-diagnostics:assembleDebug
+      - name: Upload device diagnostics APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: firewalldns-device-diagnostics-debug
+          path: device-diagnostics/build/outputs/apk/debug/device-diagnostics-debug.apk
+          if-no-files-found: error
+          retention-days: 14
