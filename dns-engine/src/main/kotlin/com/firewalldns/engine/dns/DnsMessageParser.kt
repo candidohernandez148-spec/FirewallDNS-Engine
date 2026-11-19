@@ -83,8 +83,15 @@ object DnsMessageParser {
             offset += 4 // Extended RCODE, version and flags
             val rdLength = u16(packet, offset)
             offset += 2
-            if (offset + rdLength != packet.size) return invalid("dns_opt_rdata_length_invalid")
-            offset += rdLength
+            val rdataEnd = offset + rdLength
+            if (rdataEnd != packet.size) return invalid("dns_opt_rdata_length_invalid")
+            while (offset < rdataEnd) {
+                if (offset + 4 > rdataEnd) return invalid("dns_opt_option_header_truncated")
+                val optionLength = u16(packet, offset + 2)
+                offset += 4
+                if (offset + optionLength > rdataEnd) return invalid("dns_opt_option_data_truncated")
+                offset += optionLength
+            }
         }
         if (offset != packet.size) return invalid("dns_trailing_bytes")
 
