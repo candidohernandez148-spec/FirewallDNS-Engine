@@ -38,7 +38,9 @@ Se incorpora `rust-core/tests/smoltcp_udp_device.rs` como prueba de integración
 
 Esta prueba valida únicamente el tramo **socket UDP smoltcp → interfaz IP → cola TX virtual**. No representa una conexión a Internet ni una retransmisión por socket Android protegido. No valida recepción desde la red, timeouts, fragmentación, IPv6 end-to-end, control de flujo, protección contra bucles, ni integración con el TUN real. Por tanto, el adaptador no se activa en producción y DNS permanece sin cambios.
 
-Siguiente puerta técnica: implementar y probar el adaptador Android de datagramas protegidos (`VpnService.protect()` antes de `connect()`), con ciclo de vida por flujo, límites de concurrencia/colas, cancelación y cierre determinista. Después se añadirán pruebas de ida y vuelta en dispositivo antes de enrutar UDP de aplicaciones por Rust.
+Primera pieza del adaptador Android de UDP protegido: `AndroidProtectedUdpSocketFactory` crea un socket no conectado, configura sus límites, exige que `VpnService.protect()` tenga éxito y solo entonces ejecuta `connect()`. Rechaza endpoints no resueltos y límites fuera de rango; ante cualquier fallo cierra el socket y no continúa sin protección. El llamador es dueño del socket y debe cerrarlo al terminar el flujo. Las pruebas JVM comprueban el orden protect→connect, el cierre cuando la protección falla y la validación previa de endpoint/límites.
+
+Esta pieza todavía no implementa un gestor de flujos, límites globales de concurrencia, colas de paquetes, cancelación coordinada, puente de recepción hacia smoltcp ni integración con el TUN. No se usa desde el servicio VPN de producción y no enruta UDP general. Siguiente puerta: construir un gestor de flujos acotado con cancelación/cierre determinista y una prueba loopback bidireccional; después integrar el ciclo smoltcp–socket protegido en el servicio de diagnóstico, manteniendo DNS productivo intacto.
 
 ## Validación
 
