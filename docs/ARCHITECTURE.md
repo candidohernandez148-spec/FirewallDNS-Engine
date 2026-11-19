@@ -47,6 +47,14 @@ OBSERVE registra señales y permite el tráfico; no equivale a bloquear.
 ## Estrategia de transporte
 Definir interfaces y medir alternativas. Se prefiere integrar un stack probado antes que implementar TCP/IP desde cero. Ningún stack existente se elimina ni sustituye en FirewallDNS hasta que un candidato independiente pase pruebas de compatibilidad, seguridad y rendimiento.
 
+## Estado del prototipo DNS
+
+El módulo `dns-engine` contiene un parser de consultas DNS de una pregunta, con validación de cabecera y QNAME, una sección adicional opcional EDNS(0) OPT, evaluación contra `engine-core` y síntesis NXDOMAIN. La respuesta local conserva ID, pregunta, RD/CD, tamaño UDP anunciado y el bit DNSSEC OK; no copia las opciones EDNS del cliente.
+
+El codec DNS-over-TCP solo maneja el prefijo de longitud de dos bytes y mensajes completos/parciales en buffers. No abre sockets ni implementa reensamblado de flujos. Todavía falta transporte UDP/TCP, reenvío upstream, timeouts, caché TTL y pruebas contra resolvers reales.
+
+Las clases DNS distintas de IN se pasan sin aplicar políticas de dominio. Los tipos A/AAAA y otros tipos IN se evalúan por nombre; el módulo no interpreta RDATA ni genera respuestas A/AAAA permitidas.
+
 ## Concurrencia y persistencia
 - Evaluación síncrona, acotada y sin disco en la ruta crítica.
 - Room/SQLite fuera de la ruta crítica; WAL se evaluará con mediciones.
