@@ -48,6 +48,7 @@
 
 ## Fase 5 — Adaptador VPN y transporte
 - [x] Añadir núcleo Rust/JNI experimental para validación estructural de paquetes DNS UDP IPv4/IPv6, aislado de la ruta de producción y compilado para arm64-v8a.
+- [x] Añadir gestor Android experimental de flujos UDP protegidos con límite de flujos, colas por flujo, RX/TX loopback, cancelación y cierre por flujo; aún sin puente TUN/smoltcp ni uso en producción.
 - [x] Añadir decodificador puro de datagramas UDP IPv4/IPv6 no DNS con validación de longitud/checksum; aún sin sockets, reenvío ni integración TUN.
 - [ ] Benchmark A/B Rust frente a Kotlin en Samsung A34 5G y decisión documentada antes de activar el núcleo nativo.
 - [x] Prototipo aislado VpnService/TUN para DNS UDP real, limitado a direcciones virtuales y con upstream protegido (diagnóstico; no es VPN de tráfico general).
