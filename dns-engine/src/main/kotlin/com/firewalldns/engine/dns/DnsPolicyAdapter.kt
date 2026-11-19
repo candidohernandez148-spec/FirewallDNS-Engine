@@ -35,7 +35,14 @@ class DnsPolicyAdapter(private val policyEngine: PolicyEngine) {
     }
 
     private fun nxdomainResponse(question: DnsQuestion): ByteArray {
-        val opt = question.wireOptRecord ?: byteArrayOf()
+        val opt = question.ednsUdpPayloadSize?.let { payloadSize ->
+            byteArrayOf(
+                0, 0, 41,
+                (payloadSize ushr 8).toByte(), payloadSize.toByte(),
+                0, 0, if (question.ednsDnssecOk) 0x80.toByte() else 0, 0,
+                0, 0,
+            )
+        } ?: byteArrayOf()
         val response = ByteArray(12 + question.wireQuestion.size + opt.size)
         putU16(response, 0, question.id)
         // QR + preserve RD and CD + NXDOMAIN. RA is not asserted by this local synthesizer.
