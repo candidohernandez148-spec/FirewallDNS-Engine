@@ -52,6 +52,10 @@ class EngineTunVpnService : VpnService() {
             if (!running.get()) stopSelf(startId)
             return START_NOT_STICKY
         }
+        packetsIn.set(0)
+        dnsProcessed.set(0)
+        dropped.set(0)
+        responsesOut.set(0)
         startForeground(NOTIFICATION_ID, notification())
         try {
             val descriptor = Builder()
@@ -228,9 +232,10 @@ class EngineTunVpnService : VpnService() {
         reader = null
         workers?.shutdownNow()
         workers = null
-        activeRuntime = null
         serviceState = "stopped"
+        // Publish final counters before releasing the runtime so the Activity can export them.
         publish(serviceState)
+        activeRuntime = null
         stopForeground(STOP_FOREGROUND_REMOVE)
     }
 
