@@ -187,16 +187,8 @@ class DnsUpstreamClient(
         if ((responseFlags and OPCODE_MASK) != (question.requestFlags and OPCODE_MASK)) {
             return "dns_upstream_opcode_mismatch"
         }
-        if (u16(response, 4) != 1) return "dns_upstream_question_count_unsupported"
-        val questionEnd = DNS_HEADER_SIZE + question.wireQuestion.size
-        if (response.size < questionEnd) return "dns_upstream_response_question_truncated"
-        if (!response.copyOfRange(DNS_HEADER_SIZE, questionEnd).contentEquals(question.wireQuestion)) {
-            return "dns_upstream_question_mismatch"
-        }
-        // The original query is validated before this method; retain this check to
-        // make accidental use with a different query/question pair fail closed.
         if (u16(query, 0) != question.id) return "dns_upstream_query_mismatch"
-        return null
+        return DnsUpstreamResponseValidator.validate(response, question.wireQuestion)
     }
 
     private fun flags(message: ByteArray): Int = u16(message, 2)
