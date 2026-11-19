@@ -31,8 +31,9 @@ Los nombres son límites lógicos iniciales; se convertirán en módulos Gradle 
 1. El adaptador recibe una consulta DNS o metadatos de flujo.
 2. Normaliza la entrada e identifica la aplicación si es posible.
 3. Consulta la caché.
-4. Si no hay resultado vigente, Policy Engine evalúa reglas y señales.
-5. Devuelve decisión, motivo, regla, confianza y caducidad.
+4. Si no hay resultado vigente, Policy Engine evalúa reglas explícitas.
+5. Solo cuando no existe regla coincidente, Threat Engine evalúa indicadores locales y heurísticas.
+6. Devuelve decisión, motivo, regla, confianza y caducidad.
 6. Publica evento al monitor de forma asíncrona y acotada.
 
 OBSERVE registra señales y permite el tráfico; no equivale a bloquear.
@@ -46,6 +47,10 @@ OBSERVE registra señales y permite el tráfico; no equivale a bloquear.
 
 ## Estrategia de transporte
 Definir interfaces y medir alternativas. Se prefiere integrar un stack probado antes que implementar TCP/IP desde cero. Ningún stack existente se elimina ni sustituye en FirewallDNS hasta que un candidato independiente pase pruebas de compatibilidad, seguridad y rendimiento.
+
+## Estado del prototipo de inteligencia local
+
+El módulo `threat-engine` incorpora una lista pequeña de indicadores publicitarios y de tracking. Los indicadores de publicidad de alta confianza pueden sugerir BLOCK; los endpoints de tracking seleccionados sugieren OBSERVE. Las heurísticas por etiquetas DNS (por ejemplo, términos de anuncios o tracking) solo sugieren OBSERVE. Una allowlist evita que estas heurísticas afecten dominios esenciales conocidos. Las reglas explícitas del usuario se evalúan antes y prevalecen. No hay todavía feed firmado ni cobertura exhaustiva de malware/phishing.
 
 ## Estado del prototipo DNS
 
