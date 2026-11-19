@@ -5,6 +5,9 @@ import com.firewalldns.engine.core.PolicyDecision
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 
 class DnsDecisionCacheTest {
     @Test fun returnsCachedDecisionUntilTtlExpires() {
@@ -39,7 +42,7 @@ class DnsDecisionCacheTest {
         assertEquals(2, cache.size)
     }
 
-    @Test fun clearRemovesAllEntries() {
+    @Test fun concurrentWritersNeverExceedConfiguredBound() {\n        val cache = DnsDecisionCache(maxEntries = 32, ttlMillis = 10_000)\n        val workers = 8\n        val iterations = 1_000\n        val ready = CountDownLatch(workers)\n        val start = CountDownLatch(1)\n        val executor = Executors.newFixedThreadPool(workers)\n        try {\n            repeat(workers) { worker ->\n                executor.execute {\n                    ready.countDown()\n                    start.await()\n                    repeat(iterations) { index ->\n                        val key = DnsDecisionCacheKey("d${worker}_$index.example", null, 1)\n                        cache.put(key, PolicyDecision(PolicyAction.ALLOW, "stress", policyRevision = 1), 1)\n                    }\n                }\n            }\n            ready.await(5, TimeUnit.SECONDS)\n            start.countDown()\n            executor.shutdown()\n            check(executor.awaitTermination(10, TimeUnit.SECONDS))\n            assertEquals(32, cache.size)\n        } finally {\n            executor.shutdownNow()\n        }\n    }\n\n    @Test fun clearRemovesAllEntries() {
         val cache = DnsDecisionCache()
         cache.put(
             DnsDecisionCacheKey("example.com", null, 1),
