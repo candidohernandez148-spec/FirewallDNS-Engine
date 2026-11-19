@@ -44,6 +44,7 @@ class DnsUpstreamFailoverClient(
     private fun isRetryableUpstreamFailure(reason: String): Boolean =
         reason in RETRYABLE_FAILURES ||
             reason.startsWith("dns_upstream_response_") ||
+            reason in RESPONSE_VALIDATION_FAILURES ||
             reason in RESPONSE_MISMATCH_FAILURES
 
     private companion object {
@@ -55,6 +56,19 @@ class DnsUpstreamFailoverClient(
             "dns_upstream_tcp_response_incomplete",
             "dns_upstream_tcp_frame_too_short",
             "dns_upstream_tcp_response_truncated",
+        )
+        val RESPONSE_VALIDATION_FAILURES = setOf(
+            "dns_upstream_question_count_unsupported",
+            "dns_upstream_question_malformed",
+            "dns_upstream_question_mismatch",
+            "dns_upstream_record_count_unsupported",
+            "dns_upstream_record_name_malformed",
+            "dns_upstream_record_header_truncated",
+            "dns_upstream_record_data_truncated",
+            "dns_upstream_edns_record_position_invalid",
+            "dns_upstream_edns_owner_invalid",
+            "dns_upstream_edns_option_header_truncated",
+            "dns_upstream_edns_option_data_truncated",
         )
         val RESPONSE_MISMATCH_FAILURES = setOf(
             "dns_upstream_transaction_id_mismatch",
