@@ -13,18 +13,18 @@ La arquitectura final tendrá un solo motor: `FirewallDNS-Engine`. La aplicació
 - Identidad de aplicación/UID y reglas por aplicación.
 - Bloqueo de dominios, IP de sinkhole, reglas de usuario, listas y excepciones.
 - Políticas explicables BLOCK / OBSERVE / ALLOW, con prioridad y procedencia.
-- Aprendizaje local, reputación, allowlist de dominios esenciales e historial.
+- Indicadores integrados/curados, reputación determinista y allowlist de dominios esenciales; sin aprendizaje persistente.
 - Métricas en tiempo real sin bloquear la ruta de red.
 - Resiliencia a cambios Wi-Fi/datos móviles, suspensión, revocación VPN y falta de upstream.
 
 ## Contrato de integración
 
 1. El motor expone interfaces neutrales de plataforma; no depende de clases Android.
-2. La aplicación implementa adaptadores Android para TUN, identidad UID, almacenamiento, reloj y protección de sockets.
+2. La aplicación implementa adaptadores Android para TUN, identidad UID, almacenamiento de configuración explícita, reloj y protección de sockets.
 3. La decisión de dominio y conexión se realiza exclusivamente en FirewallDNS-Engine.
 4. La UI observa snapshots/eventos acotados; nunca ejecuta trabajo pesado en el hilo principal.
 5. El upstream y cualquier I/O se ejecutan fuera de la ruta crítica.
-6. La aplicación no mantiene una segunda implementación de reglas, aprendizaje o decisiones una vez completada la migración.
+6. La aplicación no mantiene una segunda implementación de reglas ni decisiones una vez completada la migración. No se añadirá aprendizaje persistente.
 
 ## Puertas de validación antes de retirar Firestack
 
@@ -42,7 +42,7 @@ No se elimina Firestack ni se cambia el servicio VPN predeterminado antes de sup
 
 1. Endurecer los contratos del motor y sus pruebas.
 2. Completar DNS upstream, caché de respuestas TTL y concurrencia.
-3. Completar políticas, amenazas, aprendizaje persistente y monitorización.
+3. Completar políticas, indicadores curados, heurísticas deterministas y monitorización; excluir aprendizaje persistente.
 4. Implementar la abstracción de procesamiento de paquetes y conexiones sin crear una pila TCP/IP propia sin justificación.
 5. Publicar/versionar el motor y consumirlo desde Android.
 6. Implementar adaptadores Android y ejecutar la matriz de pruebas en dispositivo.
