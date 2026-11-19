@@ -5,7 +5,7 @@
 
 use firewalldns_native::{parse_udp_packet, TunPacketDevice};
 use smoltcp::iface::{Config, Interface, SocketSet};
-use smoltcp::socket::udp::{PacketMetadata, Socket as UdpSocket, SocketBuffer};
+use smoltcp::socket::udp::{PacketBuffer, PacketMetadata, Socket as UdpSocket};
 use smoltcp::time::Instant;
 use smoltcp::wire::{HardwareAddress, IpAddress, IpCidr, IpEndpoint, Ipv4Address};
 
@@ -21,8 +21,8 @@ fn smoltcp_udp_socket_emits_valid_packet_through_bounded_tun_device() {
         ));
     });
 
-    let rx_buffer = SocketBuffer::new(vec![PacketMetadata::EMPTY; 4], vec![0; 512]);
-    let tx_buffer = SocketBuffer::new(vec![PacketMetadata::EMPTY; 4], vec![0; 512]);
+    let rx_buffer = PacketBuffer::new(vec![PacketMetadata::EMPTY; 4], vec![0; 512]);
+    let tx_buffer = PacketBuffer::new(vec![PacketMetadata::EMPTY; 4], vec![0; 512]);
     let socket = UdpSocket::new(rx_buffer, tx_buffer);
     let mut sockets = SocketSet::new(vec![]);
     let handle = sockets.add(socket);
