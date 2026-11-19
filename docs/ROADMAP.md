@@ -20,11 +20,11 @@
 - [x] Parser inicial de consultas de una pregunta.
 - [x] Validación de cabecera, QNAME, QTYPE/QCLASS y límites.
 - [x] Soporte de un registro EDNS(0) OPT y respuesta bloqueada NXDOMAIN.
-- [x] Evaluación de DNS a través del motor de políticas.
+- [x] Evaluación de DNS a través del motor de políticas.\n- [x] Caché acotada de decisiones con TTL y aislamiento por revisión de reglas.
 - [ ] Suite completa de casos malformados y fuzzing.
 - [ ] Transporte DNS UDP y TCP.
 - [ ] Reenvío upstream, timeouts y cancelación.
-- [ ] Caché positiva/negativa con TTL, límites e invalidación.
+- [ ] Caché de respuestas DNS positiva/negativa con TTL, límites e invalidación (separada de la caché de decisiones).
 - [ ] Medición DNS P50/P95/P99.
 
 ## Fase 3 — Identidad de aplicación y conexiones
