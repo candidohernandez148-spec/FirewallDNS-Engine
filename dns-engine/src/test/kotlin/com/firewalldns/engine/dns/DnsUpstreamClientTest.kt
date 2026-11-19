@@ -90,6 +90,44 @@ class DnsUpstreamClientTest {
         }
     }
 
+
+    @Test fun rejectsResponseWithDifferentQuestion() {
+        DatagramSocket(0, InetAddress.getByName("127.0.0.1")).use { server ->
+            server.soTimeout = 2_000
+            val query = query("example.com")
+            val responder = thread {
+                val incoming = DatagramPacket(ByteArray(512), 512)
+                server.receive(incoming)
+                val response = responseFor(query("other.example"))
+                server.send(DatagramPacket(response, response.size, incoming.socketAddress))
+            }
+
+            val result = DnsUpstreamClient(
+                DnsUpstreamConfig("127.0.0.1", server.localPort, timeoutMillis = 2_000),
+                NoOpDnsSocketProtector,
+            ).exchange(query)
+
+            responder.join(2_000)
+            assertEquals(
+                "dns_upstream_question_mismatch",
+                assertIs<DnsUpstreamResult.Failure>(result).reason,
+            )
+        }
+    }
+
+    @Test fun returnsBoundedUdpTimeoutWhenUpstreamDoesNotReply() {
+        DatagramSocket(0, InetAddress.getByName("127.0.0.1")).use { server ->
+            val result = DnsUpstreamClient(
+                DnsUpstreamConfig("127.0.0.1", server.localPort, timeoutMillis = 100),
+                NoOpDnsSocketProtector,
+            ).exchange(query("example.com"))
+            assertEquals(
+                "dns_upstream_udp_timeout",
+                assertIs<DnsUpstreamResult.Failure>(result).reason,
+            )
+        }
+    }
+
     @Test fun refusesUnprotectedSocketBeforeSending() {
         DatagramSocket(0, InetAddress.getByName("127.0.0.1")).use { server ->
             val query = query("example.com")
