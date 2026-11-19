@@ -25,4 +25,6 @@ data class PolicyDecision(
     val reason: String,
     val ruleId: String? = null,
     val source: RuleSource? = null,
+    val policyRevision: Long = 0,
+    val expiresAtEpochMillis: Long? = null,
 )
