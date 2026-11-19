@@ -57,10 +57,10 @@ Los umbrales numéricos se fijarán tras capturar línea base en hardware real; 
 ## Benchmark DNS optativo
 
 - `DnsLatencyBenchmarkTest` contiene una prueba siempre activa para verificar el cálculo nearest-rank de P50/P95/P99 y un benchmark optativo que mide 500 muestras tras 50 calentamientos.
-- Ejecuta dos escenarios separados: UDP upstream contra un responder DNS local de loopback (cada muestra usa un QNAME distinto para forzar miss) y hit de caché de respuestas (mismo QNAME, nuevo ID DNS). No mezcla ambas distribuciones.
+- Ejecuta tres escenarios separados: UDP upstream contra un responder DNS local de loopback (cada muestra usa un QNAME distinto para forzar miss), hit de caché de respuestas (mismo QNAME, nuevo ID DNS) y evaluación determinista de políticas con 128 reglas (el match al final fuerza recorrer el conjunto). No mezcla las distribuciones.
 - Ejecutar manualmente: `FIREWALLDNS_RUN_DNS_BENCHMARKS=true gradle :dns-engine:test --tests "*DnsLatencyBenchmarkTest" --info` o lanzar el workflow `DNS Latency Benchmarks` desde GitHub Actions.
 - La salida `DNS_BENCHMARK` informa número de muestras, calentamientos y P50/P95/P99 en microsegundos. El cálculo usa nearest-rank; no aplica umbrales de rendimiento automáticos porque el host CI y la carga no son una línea base de dispositivo.
-- Este benchmark caracteriza el coste del cliente JVM y la caché con loopback; no mide latencia de Internet, `VpnService.protect()`, TUN, radio Wi-Fi/móvil ni rendimiento del Samsung A34 5G. La medición Android real y la comparación con Firestack siguen pendientes antes de fijar umbrales o integrar.
+- El escenario de políticas mide el evaluador JVM sin transporte; los otros dos caracterizan cliente upstream y caché. Ninguno mide latencia de Internet, `VpnService.protect()`, TUN, radio Wi-Fi/móvil ni rendimiento del Samsung A34 5G. La medición Android real y la comparación con Firestack siguen pendientes antes de fijar umbrales o integrar.
 
 
 ## Adaptador Android de protección de sockets
