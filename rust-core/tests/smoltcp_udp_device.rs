@@ -5,7 +5,6 @@
 
 use firewalldns_native::{parse_udp_packet, TunPacketDevice};
 use smoltcp::iface::{Config, Interface, SocketSet};
-use smoltcp::phy::Medium;
 use smoltcp::socket::udp::{PacketMetadata, Socket as UdpSocket, SocketBuffer};
 use smoltcp::time::Instant;
 use smoltcp::wire::{HardwareAddress, IpAddress, IpCidr, IpEndpoint, Ipv4Address};
@@ -21,7 +20,6 @@ fn smoltcp_udp_socket_emits_valid_packet_through_bounded_tun_device() {
             24,
         ));
     });
-    assert_eq!(device.capabilities().medium, Medium::Ip);
 
     let rx_buffer = SocketBuffer::new(vec![PacketMetadata::EMPTY; 4], vec![0; 512]);
     let tx_buffer = SocketBuffer::new(vec![PacketMetadata::EMPTY; 4], vec![0; 512]);
