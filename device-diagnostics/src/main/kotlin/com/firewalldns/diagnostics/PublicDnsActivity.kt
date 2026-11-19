@@ -48,7 +48,11 @@ class PublicDnsActivity : Activity() {
             val processed = intent.getLongExtra("dns_processed", 0)
             val sent = intent.getLongExtra("responses_out", 0)
             val dropped = intent.getLongExtra("dropped", 0)
-            status.text = "Motor propio en TUN: $state\\nPaquetes recibidos: $packets\\nDNS procesados: $processed\\nRespuestas enviadas: $sent\\nDescartados: $dropped\\n\\nAl terminar, pulsa Detener. Solo se enruta al túnel el DNS dirigido a sus direcciones virtuales; no es un firewall de todo el tráfico."
+            val blocked = intent.getLongExtra("blocked", 0)
+            val observed = intent.getLongExtra("observed", 0)
+            val allowed = intent.getLongExtra("allowed", 0)
+            val rejected = intent.getLongExtra("rejected", 0)
+            status.text = "Motor propio en TUN: $state\\nPaquetes recibidos: $packets\\nDNS procesados: $processed\\nRespuestas enviadas: $sent\\nBLOCK: $blocked | OBSERVE: $observed | ALLOW: $allowed\\nRechazados: $rejected\\nDescartados: $dropped\\n\\nAl terminar, pulsa Detener. Solo se enruta al túnel el DNS dirigido a sus direcciones virtuales; no es un firewall de todo el tráfico."
         }
     }
 
