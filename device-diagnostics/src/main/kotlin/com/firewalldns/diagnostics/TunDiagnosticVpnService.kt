@@ -58,11 +58,14 @@ class TunDiagnosticVpnService : VpnService() {
         val receivedAt = ConcurrentHashMap<Int, Long>()
         val sentAt = ConcurrentHashMap<Int, Long>()
         val completed = CountDownLatch(PROBE_COUNT)
+        val readerReady = CountDownLatch(1)
 
         reader = thread(name = "firewalldns-diagnostic-tun-reader") {
             try {
                 FileInputStream(descriptor.fileDescriptor).use { input ->
                     val buffer = ByteArray(32767)
+                    // Wait until the TUN reader is ready before sending the first probe.
+                    readerReady.countDown()
                     while (running && completed.count > 0) {
                         val length = input.read(buffer)
                         if (length <= 0) continue
@@ -81,6 +84,9 @@ class TunDiagnosticVpnService : VpnService() {
 
         thread(name = "firewalldns-diagnostic-tun-probes") {
             try {
+                if (!readerReady.await(READER_READY_TIMEOUT_MS, TimeUnit.MILLISECONDS)) {
+                    throw IllegalStateException("El lector TUN no quedó listo a tiempo")
+                }
                 val protectSocket = DatagramSocket(null)
                 val protectStarted = System.nanoTime()
                 val protectResult = try {
@@ -133,6 +139,7 @@ class TunDiagnosticVpnService : VpnService() {
                     sendErrors,
                     latencies,
                     allObserved,
+                    (0 until PROBE_COUNT).filterNot { receivedAt.containsKey(it) },
                 )
                 publishResult(report)
             } catch (failure: Throwable) {
@@ -152,6 +159,7 @@ class TunDiagnosticVpnService : VpnService() {
         sendErrors: Int,
         latencies: List<Long>,
         allObserved: Boolean,
+        missingSequences: List<Int>,
     ): String {
         fun percentile(p: Double): Long {
             if (latencies.isEmpty()) return 0
@@ -188,6 +196,7 @@ class TunDiagnosticVpnService : VpnService() {
                 "received": $received,
                 "lost": $lost,
                 "send_errors": $sendErrors,
+                "missing_sequences": [${missingSequences.joinToString(",")}],
                 "all_observed_before_timeout": $allObserved,
                 "p50_us": ${percentile(0.50)},
                 "p95_us": ${percentile(0.95)},
@@ -263,5 +272,6 @@ class TunDiagnosticVpnService : VpnService() {
         private const val PROBE_COUNT = 100
         private const val PROBE_INTERVAL_MS = 8L
         private const val PROBE_TIMEOUT_MS = 8_000L
+        private const val READER_READY_TIMEOUT_MS = 2_000L
     }
 }
