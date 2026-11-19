@@ -28,7 +28,7 @@ Construir un motor de filtrado y protección de red para Android, desacoplado de
 Los límites implementados son módulos Gradle. `engine-runtime` expone una fachada única para que Android no tenga que coordinar directamente varios módulos internos.
 
 ## Flujo de decisión
-1. El adaptador recibe una consulta DNS o metadatos de flujo.
+1. El adaptador recibe un paquete DNS validado desde TUN o metadatos de flujo.
 2. Normaliza la entrada e identifica la aplicación si es posible.
 3. Consulta la caché.
 4. Si no hay resultado vigente, Policy Engine evalúa reglas explícitas.
@@ -84,3 +84,10 @@ Este módulo compila como Android Library (minSdk 24, compileSdk 36) y depende d
 
 ## Evolución
 No se fijan todavía lenguaje, versión Android ni dependencias de red. Antes del primer módulo ejecutable se documentarán decisiones tecnológicas y se validará compatibilidad con el nivel mínimo de Android previsto.
+
+
+## Primer recorrido real TUN DNS (diagnóstico aislado)
+
+El módulo Android contiene `TunDnsPacketProcessor`, que acepta únicamente datagramas UDP DNS IPv4 (sin fragmentos) e IPv6 básico (sin cabeceras de extensión). Valida límites IP/UDP, entrega el payload DNS al `EngineRuntime`, devuelve NXDOMAIN sintético para BLOCK, y reenvía OBSERVE/ALLOW mediante un callback upstream. Construye el paquete de respuesta invirtiendo direcciones/puertos y recalculando checksums IPv4/UDP, incluido el pseudo-header IPv6. Las respuestas DNS que superan el límite configurado se marcan como truncadas para respetar el MTU; el cliente puede intentar DNS-over-TCP, que este prototipo todavía no termina localmente.
+
+`device-diagnostics:EngineTunVpnService` configura un TUN Android con rutas únicamente a sus servidores DNS virtuales IPv4/IPv6. El lector TUN no hace I/O de red: copia paquetes a una cola acotada y un grupo de trabajadores realiza evaluación/upstream. Los sockets de salida se protegen con `VpnService.protect()`. Este servicio es de diagnóstico y no sustituye aún el servicio VPN de FirewallDNS; tampoco captura tráfico general ni demuestra paridad funcional de producción.
