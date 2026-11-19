@@ -28,6 +28,26 @@ class Ipv4UdpProbeParserTest {
         assertNull(Ipv4UdpProbeParser.parse(wrongMagic, wrongMagic.size))
     }
 
+    @Test fun reportsHeaderOnlyRejectionMetadata() {
+        val packet = packet(20).also { it[19] = 2 }
+        val inspection = Ipv4UdpProbeParser.inspect(packet, packet.size)
+        assertNull(inspection.probe)
+        assertEquals("wrong_destination", inspection.rejection)
+        assertEquals(4, inspection.ipVersion)
+        assertEquals(17, inspection.protocol)
+        assertEquals("198.18.0.2", inspection.destinationIpv4)
+        assertEquals(4242, inspection.destinationPort)
+        assertEquals(16, inspection.udpLength)
+    }
+
+    @Test fun reportsNonIpv4PacketsWithoutReadingPayload() {
+        val packet = ByteArray(48).also { it[0] = 0x60 }
+        val inspection = Ipv4UdpProbeParser.inspect(packet, packet.size)
+        assertEquals("not_ipv4", inspection.rejection)
+        assertEquals(6, inspection.ipVersion)
+        assertNull(inspection.destinationIpv4)
+    }
+
     @Test fun rejectsInvalidLengthsAndFragments() {
         val shortUdp = packet(20).also { it[25] = 7 }
         assertNull(Ipv4UdpProbeParser.parse(shortUdp, shortUdp.size))
