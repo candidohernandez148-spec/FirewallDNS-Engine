@@ -102,7 +102,7 @@ class PublicDnsActivity : Activity() {
                 val result = FailoverDnsBenchmark.execute(this)
                 report = result.first
                 runOnUiThread {
-                    status.text = result.second + "\\n\\nGuarda el JSON. Repite una vez en Wi-Fi y otra en datos móviles."
+                    status.text = result.second + "\n\nGuarda el JSON. Repite una vez en Wi-Fi y otra en datos móviles."
                     runButton.isEnabled = true
                     failoverButton.isEnabled = true
                     exportButton.isEnabled = true
