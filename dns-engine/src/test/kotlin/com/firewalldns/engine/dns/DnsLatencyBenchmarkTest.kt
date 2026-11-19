@@ -88,7 +88,7 @@ class DnsLatencyBenchmarkTest {
             assertEquals(DnsUpstreamTransport.CACHE, prime.response.transport)
             val cacheSamples = ArrayList<Long>(sampleCount)
             repeat(sampleCount) { index ->
-                val request = query("cache.bench.example", (index + 1) and 0xffff)
+                val request = query("sample${sampleCount - 1}.bench.example", (index + 1) and 0xffff)
                 val start = System.nanoTime()
                 val result = assertIs<DnsUpstreamResult.Success>(client.exchange(request))
                 cacheSamples += System.nanoTime() - start
