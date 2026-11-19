@@ -50,6 +50,15 @@ class PolicyEngineTest {
         assertEquals("user", engine.evaluate(PolicyRequest("example.com"), 1).ruleId)
     }
 
+    @Test fun heuristicRuleCannotBlockEvenAtHighPriority() {
+        assertFailsWith<IllegalArgumentException> {
+            PolicyEngine(listOf(rule(
+                "heuristic-block", "bad.example", PolicyAction.BLOCK,
+                source = RuleSource.HEURISTIC, priority = 100_000,
+            )))
+        }
+    }
+
     @Test fun longerMatchingDomainWinsAtEqualPriorityAndSource() {
         val engine = PolicyEngine(listOf(
             rule("a-parent", "example.com", PolicyAction.ALLOW),
