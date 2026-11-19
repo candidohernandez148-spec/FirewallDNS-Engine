@@ -8,7 +8,7 @@
 - Packet/Connection: IPv4/IPv6, UDP/TCP, ICMP, fragmentación, MTU, checksums, DNS TCP, cierres y reconexiones.
 - VPN: protección de sockets, prevención de bucles, DNS leak, cambio Wi-Fi/datos y suspensión/reanudación.
 - Threat Engine: falsos positivos, allowlist esencial, señales contradictorias y corrección del aprendizaje.
-- Monitor: orden de eventos, backpressure, descartes contabilizados y UI no bloqueante.
+- Monitor: orden de eventos, capacidad máxima, descartes contabilizados, redacción de datos sensibles, métricas concurrentes y UI no bloqueante.
 
 ## Matriz mínima
 - Samsung Galaxy A34 5G como dispositivo de referencia.
