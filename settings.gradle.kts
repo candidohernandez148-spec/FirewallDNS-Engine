@@ -1,2 +1,2 @@
 rootProject.name = "FirewallDNS-Engine"
-include(":engine-core")
+include(":engine-core", ":dns-engine")
