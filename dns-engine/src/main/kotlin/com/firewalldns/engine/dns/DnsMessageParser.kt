@@ -10,6 +10,7 @@ data class DnsQuestion(
     val dnsClass: Int,
     /** Exact question bytes (QNAME, QTYPE, QCLASS), safe to copy into a reply. */
     val wireQuestion: ByteArray,
+    val wireOptRecord: ByteArray?,
 )
 
 sealed interface DnsParseResult {
@@ -67,9 +68,9 @@ object DnsMessageParser {
         val dnsClass = u16(packet, offset + 2)
         offset += 4
         val questionEnd = offset
-        if (dnsClass != CLASS_IN) return invalid("dns_class_unsupported")
-
+        var wireOptRecord: ByteArray? = null
         if (arCount == 1) {
+            val optStart = offset
             if (offset + 11 > packet.size) return invalid("dns_opt_truncated")
             if ((packet[offset++].toInt() and 0xff) != 0) return invalid("dns_opt_owner_unsupported")
             if (u16(packet, offset) != TYPE_OPT) return invalid("dns_additional_record_unsupported")
@@ -79,6 +80,7 @@ object DnsMessageParser {
             offset += 2
             if (offset + rdLength != packet.size) return invalid("dns_opt_rdata_length_invalid")
             offset += rdLength
+            wireOptRecord = packet.copyOfRange(optStart, offset)
         }
         if (offset != packet.size) return invalid("dns_trailing_bytes")
 
@@ -90,6 +92,7 @@ object DnsMessageParser {
                 type = type,
                 dnsClass = dnsClass,
                 wireQuestion = packet.copyOfRange(questionStart, questionEnd),
+                wireOptRecord = wireOptRecord,
             ),
         )
     }
