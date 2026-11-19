@@ -44,10 +44,29 @@ class PolicyEngineTest {
 
     @Test fun userSourceWinsAtEqualPriority() {
         val engine = PolicyEngine(listOf(
-            rule("learned", "example.com", PolicyAction.BLOCK, source = RuleSource.LEARNED),
+            rule("heuristic", "example.com", PolicyAction.OBSERVE, source = RuleSource.HEURISTIC),
             rule("user", "example.com", PolicyAction.ALLOW, source = RuleSource.USER),
         ))
         assertEquals("user", engine.evaluate(PolicyRequest("example.com"), 1).ruleId)
+    }
+
+    @Test fun longerMatchingDomainWinsAtEqualPriorityAndSource() {
+        val engine = PolicyEngine(listOf(
+            rule("a-parent", "example.com", PolicyAction.ALLOW),
+            rule("z-specific", "safe.example.com", PolicyAction.BLOCK),
+        ))
+        val result = engine.evaluate(PolicyRequest("safe.example.com"), 1)
+        assertEquals(PolicyAction.BLOCK, result.action)
+        assertEquals("z-specific", result.ruleId)
+    }
+
+    @Test fun exactDomainWinsOverSubdomainRuleAtEqualPriorityAndSource() {
+        val engine = PolicyEngine(listOf(
+            rule("a-subdomains", "safe.example.com", PolicyAction.ALLOW),
+            rule("z-exact", "safe.example.com", PolicyAction.BLOCK, exact = true),
+        ))
+        assertEquals("z-exact", engine.evaluate(PolicyRequest("safe.example.com"), 1).ruleId)
+        assertEquals(PolicyAction.ALLOW, engine.evaluate(PolicyRequest("child.safe.example.com"), 1).action)
     }
 
     @Test fun appScopedRuleOnlyMatchesKnownMatchingPackage() {
