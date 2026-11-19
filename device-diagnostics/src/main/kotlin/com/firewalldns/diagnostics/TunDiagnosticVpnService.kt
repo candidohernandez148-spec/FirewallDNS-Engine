@@ -13,6 +13,8 @@ import java.net.DatagramSocket
 import java.net.InetAddress
 import java.time.Instant
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import kotlin.concurrent.thread
@@ -59,6 +61,11 @@ class TunDiagnosticVpnService : VpnService() {
         val sentAt = ConcurrentHashMap<Int, Long>()
         val completed = CountDownLatch(PROBE_COUNT)
         val warmupReceived = CountDownLatch(1)
+        val bytesRead = AtomicInteger(0)
+        val packetsRead = AtomicInteger(0)
+        val matchingPackets = AtomicInteger(0)
+        val warmupSeen = AtomicInteger(0)
+        val socketSendCompleted = AtomicBoolean(false)
 
         reader = thread(name = "firewalldns-diagnostic-tun-reader") {
             try {
@@ -67,8 +74,12 @@ class TunDiagnosticVpnService : VpnService() {
                     while (running && completed.count > 0) {
                         val length = input.read(buffer)
                         if (length <= 0) continue
+                        bytesRead.addAndGet(length)
+                        packetsRead.incrementAndGet()
                         val probe = Ipv4UdpProbeParser.parse(buffer, length) ?: continue
+                        matchingPackets.incrementAndGet()
                         if (probe.sequence == WARMUP_SEQUENCE) {
+                            warmupSeen.incrementAndGet()
                             warmupReceived.countDown()
                         } else if (probe.sequence in 0 until PROBE_COUNT &&
                             receivedAt.putIfAbsent(probe.sequence, System.nanoTime()) == null
@@ -109,8 +120,15 @@ class TunDiagnosticVpnService : VpnService() {
                             Ipv4UdpProbeParser.DESTINATION_PORT,
                         ),
                     )
+                    socketSendCompleted.set(true)
                     if (!warmupReceived.await(READER_READY_TIMEOUT_MS, TimeUnit.MILLISECONDS)) {
-                        throw IllegalStateException("El paquete de sincronización no llegó al TUN")
+                        publishTunProbeFailure(
+                            "warmup_not_seen",
+                            "El socket completó send(), pero el lector no identificó el paquete de sincronización",
+                            bytesRead.get(), packetsRead.get(), matchingPackets.get(), warmupSeen.get(),
+                            socketSendCompleted.get(), protectResult, protectElapsedUs,
+                        )
+                        return@thread
                     }
                     repeat(PROBE_COUNT) { sequence ->
                         val payload = ByteArray(8)
@@ -157,7 +175,12 @@ class TunDiagnosticVpnService : VpnService() {
                 publishResult(report)
             } catch (failure: Throwable) {
                 running = false
-                publishFailure("tun_probe_failed", failure.message ?: failure.javaClass.simpleName)
+                publishTunProbeFailure(
+                    "tun_probe_failed",
+                    failure.message ?: failure.javaClass.simpleName,
+                    bytesRead.get(), packetsRead.get(), matchingPackets.get(), warmupSeen.get(),
+                    socketSendCompleted.get(), null, null,
+                )
             } finally {
                 stopSelf()
             }
@@ -217,6 +240,23 @@ class TunDiagnosticVpnService : VpnService() {
               }
             }
         """.trimIndent()
+    }
+
+    private fun publishTunProbeFailure(
+        stage: String,
+        message: String,
+        bytesRead: Int,
+        packetsRead: Int,
+        matchingPackets: Int,
+        warmupSeen: Int,
+        socketSendCompleted: Boolean,
+        protectResult: Boolean?,
+        protectElapsedUs: Long?,
+    ) {
+        val protectJson = protectResult?.let { ",\\"protect_returned\\":$it" } ?: ""
+        val protectTimeJson = protectElapsedUs?.let { ",\\"protect_elapsed_us\\":$it" } ?: ""
+        val json = """{"format":"firewalldns-tun-diagnostic-failure-v2","stage":${json(stage)},"message":${json(message)},"vpn_active":$running,"socket_send_completed":$socketSendCompleted,"tun_bytes_read":$bytesRead,"tun_packets_read":$packetsRead,"matching_probe_packets":$matchingPackets,"warmup_packets_seen":$warmupSeen$protectJson$protectTimeJson,"personal_dns_queries_collected":false}"""
+        publishResult(json)
     }
 
     private fun publishResult(json: String) {
