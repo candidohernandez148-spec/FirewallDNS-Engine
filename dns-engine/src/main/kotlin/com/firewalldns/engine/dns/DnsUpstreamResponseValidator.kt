@@ -38,7 +38,7 @@ internal object DnsUpstreamResponseValidator {
                 if (index < answerCount + authorityCount || optCount > 1) {
                     return "dns_upstream_edns_record_position_invalid"
                 }
-                if (ownerEnd != offset || (message[offset].toInt() and 0xff) != 0) {
+                if (ownerEnd != offset + 1 || (message[offset].toInt() and 0xff) != 0) {
                     return "dns_upstream_edns_owner_invalid"
                 }
                 var optionOffset = dataStart
@@ -64,7 +64,7 @@ internal object DnsUpstreamResponseValidator {
         var cursor = start
         var jumped = false
         var consumed = -1
-        var expandedLength = 1
+        var expandedLength = 0
         var steps = 0
         while (steps++ < MAX_NAME_STEPS) {
             if (cursor !in message.indices) return null
