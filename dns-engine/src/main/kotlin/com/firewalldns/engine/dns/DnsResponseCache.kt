@@ -66,6 +66,8 @@ class DnsResponseCache(
         val parsed = DnsMessageParser.parse(query) as? DnsParseResult.Valid ?: return false
         if (response.size < DNS_HEADER_SIZE || u16(response, 0) != parsed.question.id) return false
         if ((u16(response, 2) and OPCODE_MASK) != (parsed.question.requestFlags and OPCODE_MASK)) return false
+        // Enforce the upstream structural contract at the cache boundary as well.
+        if (DnsUpstreamResponseValidator.validate(response, parsed.question.wireQuestion) != null) return false
         val ttlSeconds = responseTtlSeconds(response, parsed.question.wireQuestion) ?: return false
         if (ttlSeconds <= 0L) return false
         val boundedTtl = minOf(ttlSeconds, maxTtlSeconds)
