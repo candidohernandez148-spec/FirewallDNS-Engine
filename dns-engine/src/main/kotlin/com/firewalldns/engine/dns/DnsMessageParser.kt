@@ -78,8 +78,9 @@ object DnsMessageParser {
             if (u16(packet, offset) != TYPE_OPT) return invalid("dns_additional_record_unsupported")
             offset += 2
             ednsUdpPayloadSize = u16(packet, offset)
-            offset += 4
-            ednsDnssecOk = u16(packet, offset - 2) and 0x8000 != 0
+            offset += 2 // UDP payload size
+            ednsDnssecOk = u16(packet, offset + 2) and 0x8000 != 0
+            offset += 4 // Extended RCODE, version and flags
             val rdLength = u16(packet, offset)
             offset += 2
             if (offset + rdLength != packet.size) return invalid("dns_opt_rdata_length_invalid")
