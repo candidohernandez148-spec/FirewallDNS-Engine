@@ -74,6 +74,9 @@ class PolicyEngine(initialRules: Collection<PolicyRule> = emptyList()) {
         val compiled = input.map { rule ->
             require(rule.id.isNotBlank()) { "Policy rule ID must not be blank" }
             require(rule.reason.isNotBlank()) { "Policy rule reason must not be blank" }
+            require(rule.source != RuleSource.HEURISTIC || rule.action != PolicyAction.BLOCK) {
+                "Heuristic policy rules must never block"
+            }
             require(rule.priority in MIN_PRIORITY..MAX_PRIORITY) {
                 "Policy rule priority must be between ${MIN_PRIORITY} and ${MAX_PRIORITY}"
             }
