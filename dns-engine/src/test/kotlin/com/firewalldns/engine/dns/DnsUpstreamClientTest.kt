@@ -29,6 +29,7 @@ class DnsUpstreamClientTest {
 
             val result = DnsUpstreamClient(
                 DnsUpstreamConfig("127.0.0.1", server.localPort, timeoutMillis = 2_000),
+                NoOpDnsSocketProtector,
             ).exchange(query)
 
             responder.join(2_000)
@@ -53,6 +54,7 @@ class DnsUpstreamClientTest {
 
             val result = DnsUpstreamClient(
                 DnsUpstreamConfig("127.0.0.1", server.localPort, timeoutMillis = 2_000),
+                NoOpDnsSocketProtector,
             ).exchange(query)
 
             responder.join(2_000)
@@ -77,6 +79,7 @@ class DnsUpstreamClientTest {
 
             val result = DnsUpstreamClient(
                 DnsUpstreamConfig("127.0.0.1", server.localPort, timeoutMillis = 2_000),
+                NoOpDnsSocketProtector,
             ).exchange(query)
 
             responder.join(2_000)
@@ -147,7 +150,7 @@ class DnsUpstreamClientTest {
     }
 
     @Test fun rejectsMalformedQueryBeforeOpeningSocket() {
-        val result = DnsUpstreamClient(DnsUpstreamConfig("127.0.0.1")).exchange(byteArrayOf(1, 2, 3))
+        val result = DnsUpstreamClient(DnsUpstreamConfig("127.0.0.1"), NoOpDnsSocketProtector).exchange(byteArrayOf(1, 2, 3))
         assertEquals("dns_header_truncated", assertIs<DnsUpstreamResult.Failure>(result).reason)
     }
 
