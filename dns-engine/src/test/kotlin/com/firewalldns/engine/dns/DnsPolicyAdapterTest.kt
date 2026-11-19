@@ -57,6 +57,32 @@ class DnsPolicyAdapterTest {
         assertIs<DnsEvaluation.Forward>(DnsPolicyAdapter(PolicyEngine()).evaluate(packet))
     }
 
+    @Test fun blockedEdnsQueryRetainsOptRecordInResponse() {
+        val base = query("ads.example.com")
+        val packet = base.copyOf(base.size + 11)
+        packet[11] = 1
+        packet[base.size] = 0
+        packet[base.size + 1] = 0
+        packet[base.size + 2] = 41
+        packet[base.size + 3] = 0x04
+        packet[base.size + 4] = 0xd0.toByte()
+        val result = assertIs<DnsEvaluation.Blocked>(
+            DnsPolicyAdapter(PolicyEngine(listOf(rule("ads.example.com", PolicyAction.BLOCK)))).evaluate(packet),
+        )
+        assertEquals(1, u16(result.response, 10))
+        assertContentEquals(packet.copyOfRange(base.size, packet.size), result.response.copyOfRange(base.size, result.response.size))
+    }
+
+    @Test fun nonInternetDnsClassIsForwardedWithoutDomainPolicy() {
+        val packet = query("ads.example.com")
+        packet[packet.size - 2] = 0
+        packet[packet.size - 1] = 3 // CHAOS class
+        val result = assertIs<DnsEvaluation.Forward>(
+            DnsPolicyAdapter(PolicyEngine(listOf(rule("ads.example.com", PolicyAction.BLOCK)))).evaluate(packet),
+        )
+        assertEquals("dns_class_not_filtered", result.decision.reason)
+    }
+
     @Test fun rejectsMultipleQuestionsAndUnsupportedRecords() {
         val packet = query("example.com")
         packet[5] = 2
