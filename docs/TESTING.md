@@ -4,7 +4,7 @@
 - Policy Engine: precedencia, conflictos, expiración, reglas por aplicación, decisiones y explicabilidad.
 - DNS Engine: nombres inválidos, IDN, etiquetas de servicio, mayúsculas, punto final, EDNS(0), TLV malformado, clases DNS, NXDOMAIN y truncamiento.
 - DNS TCP framing: prefijo parcial, cuerpo parcial, longitud inválida, múltiples frames en un buffer y límites.
-- DNS upstream: respuesta UDP válida, ID/pregunta incorrectos, fallback TCP ante TC, clase DNS no IN, timeout, rechazo de socket no protegido, dirección upstream no numérica, aciertos de caché sin segunda consulta de red y cancelación durante espera UDP/TCP.
+- DNS upstream: respuesta UDP válida, ID/pregunta incorrectos, registros truncados, punteros de compresión inválidos, bytes sobrantes, framing EDNS malformado, fallback TCP ante TC, clase DNS no IN, timeout, rechazo de socket no protegido, dirección upstream no numérica, aciertos de caché sin segunda consulta de red y cancelación durante espera UDP/TCP.
 - DNS response cache: TTL positivo mínimo, RFC 2308 negativo (SOA TTL/MINIMUM), expiración monotónica, decremento de TTL en hits, aislamiento por consulta/upstream, límite de entradas y exclusión de TTL=0/SERVFAIL/TC/mensajes malformados.
 - Fast Cache: concurrencia, expiración, invalidación, presión de memoria y resultados obsoletos.
 - App Identity: UID no disponible, paquete eliminado, perfiles de trabajo y restricciones Android.
@@ -73,3 +73,8 @@ Los umbrales numéricos se fijarán tras capturar línea base en hardware real; 
 ## Adaptador Android de protección de sockets
 
 El módulo `:android-adapter` se valida en CI con `gradle test` y `gradle :android-adapter:assembleDebug`. Las pruebas unitarias verifican la delegación de sockets UDP y TCP a `VpnService.protect`, tanto cuando Android acepta la protección como cuando la rechaza. La validación en dispositivo real sigue pendiente: confirmar que los sockets upstream quedan fuera del TUN y que no hay bucles ni fugas DNS al alternar Wi-Fi/datos.
+
+
+### Validación estructural de respuestas upstream
+- `DnsUpstreamResponseValidatorTest` verifica límites de registros, nombres comprimidos, RDLENGTH, bytes sobrantes y framing de opciones EDNS antes de que una respuesta sea devuelta como éxito.
+- La validación estructural no sustituye la revisión semántica de cada tipo de RDATA ni las pruebas con resolutores reales y respuestas adversariales.
