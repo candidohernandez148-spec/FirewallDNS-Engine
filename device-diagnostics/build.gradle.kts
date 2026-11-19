@@ -23,8 +23,13 @@ android {
     kotlinOptions {
         jvmTarget = "17"
     }
+
+    testOptions {
+        unitTests.isReturnDefaultValues = true
+    }
 }
 
 dependencies {
-    implementation(project(":dns-engine"))\n    testImplementation("junit:junit:4.13.2")
+    implementation(project(":dns-engine"))
+    testImplementation("junit:junit:4.13.2")
 }
