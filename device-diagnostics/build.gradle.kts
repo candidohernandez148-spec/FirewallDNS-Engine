@@ -11,8 +11,8 @@ android {
         applicationId = "com.firewalldns.diagnostics"
         minSdk = 24
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 2
+        versionName = "1.1"
     }
 
     compileOptions {
@@ -26,5 +26,5 @@ android {
 }
 
 dependencies {
-    implementation(project(":dns-engine"))
+    implementation(project(":dns-engine"))\n    testImplementation("junit:junit:4.13.2")
 }
