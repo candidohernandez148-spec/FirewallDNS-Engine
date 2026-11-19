@@ -56,6 +56,7 @@ data class DnsUpstreamResponse(
 sealed interface DnsUpstreamResult {
     data class Success(val response: DnsUpstreamResponse) : DnsUpstreamResult
     data class Failure(val reason: String) : DnsUpstreamResult
+    data object Cancelled : DnsUpstreamResult
 }
 
 /**
@@ -72,9 +73,14 @@ class DnsUpstreamClient(
     private sealed interface UdpAttempt {
         data class Response(val bytes: ByteArray, val truncated: Boolean) : UdpAttempt
         data class Failure(val reason: String) : UdpAttempt
+        data object Cancelled : UdpAttempt
     }
 
-    fun exchange(query: ByteArray): DnsUpstreamResult {
+    fun exchange(query: ByteArray): DnsUpstreamResult = exchange(query, DnsExchangeCancellation())
+
+    /** Runs one exchange within the supplied cancellation scope. */
+    fun exchange(query: ByteArray, cancellation: DnsExchangeCancellation): DnsUpstreamResult {
+        if (cancellation.isCancelled) return DnsUpstreamResult.Cancelled
         val question = when (val parsed = DnsMessageParser.parse(query)) {
             is DnsParseResult.Valid -> parsed.question
             is DnsParseResult.Invalid -> return DnsUpstreamResult.Failure(parsed.reason)
@@ -83,10 +89,13 @@ class DnsUpstreamClient(
         responseCache.get(upstreamIdentity, query, monotonicClockNanos())?.let {
             return DnsUpstreamResult.Success(it)
         }
-        val result = when (val udp = exchangeUdp(query, question)) {
+        val result = when (val udp = exchangeUdp(query, question, cancellation)) {
             is UdpAttempt.Failure -> DnsUpstreamResult.Failure(udp.reason)
-            is UdpAttempt.Response -> if (udp.truncated) {
-                exchangeTcp(query, question)
+            UdpAttempt.Cancelled -> DnsUpstreamResult.Cancelled
+            is UdpAttempt.Response -> if (cancellation.isCancelled) {
+                DnsUpstreamResult.Cancelled
+            } else if (udp.truncated) {
+                exchangeTcp(query, question, cancellation)
             } else {
                 DnsUpstreamResult.Success(DnsUpstreamResponse(udp.bytes, DnsUpstreamTransport.UDP))
             }
@@ -97,8 +106,10 @@ class DnsUpstreamClient(
         return result
     }
 
-    private fun exchangeUdp(query: ByteArray, question: DnsQuestion): UdpAttempt = try {
+    private fun exchangeUdp(query: ByteArray, question: DnsQuestion, cancellation: DnsExchangeCancellation): UdpAttempt = try {
         DatagramSocket().use { socket ->
+            if (!cancellation.register(socket)) return UdpAttempt.Cancelled
+            try {
             socket.soTimeout = config.timeoutMillis
             if (!socketProtector.protect(socket)) {
                 return UdpAttempt.Failure("dns_upstream_udp_socket_protection_failed")
@@ -112,19 +123,24 @@ class DnsUpstreamClient(
             val invalidReason = validateResponse(query, question, response)
             if (invalidReason != null) return UdpAttempt.Failure(invalidReason)
             UdpAttempt.Response(response, flags(response) and FLAG_TRUNCATED != 0)
+            } finally {
+                cancellation.unregister(socket)
+            }
         }
     } catch (_: SocketTimeoutException) {
-        UdpAttempt.Failure("dns_upstream_udp_timeout")
+        if (cancellation.isCancelled) UdpAttempt.Cancelled else UdpAttempt.Failure("dns_upstream_udp_timeout")
     } catch (_: SecurityException) {
-        UdpAttempt.Failure("dns_upstream_udp_security_error")
+        if (cancellation.isCancelled) UdpAttempt.Cancelled else UdpAttempt.Failure("dns_upstream_udp_security_error")
     } catch (_: IOException) {
-        UdpAttempt.Failure("dns_upstream_udp_io_error")
+        if (cancellation.isCancelled) UdpAttempt.Cancelled else UdpAttempt.Failure("dns_upstream_udp_io_error")
     } catch (_: IllegalArgumentException) {
         UdpAttempt.Failure("dns_upstream_udp_endpoint_invalid")
     }
 
-    private fun exchangeTcp(query: ByteArray, question: DnsQuestion): DnsUpstreamResult = try {
+    private fun exchangeTcp(query: ByteArray, question: DnsQuestion, cancellation: DnsExchangeCancellation): DnsUpstreamResult = try {
         Socket().use { socket ->
+            if (!cancellation.register(socket)) return DnsUpstreamResult.Cancelled
+            try {
             if (!socketProtector.protect(socket)) {
                 return DnsUpstreamResult.Failure("dns_upstream_tcp_socket_protection_failed")
             }
@@ -147,15 +163,18 @@ class DnsUpstreamClient(
                 return DnsUpstreamResult.Failure("dns_upstream_tcp_response_truncated")
             }
             DnsUpstreamResult.Success(DnsUpstreamResponse(response, DnsUpstreamTransport.TCP))
+            } finally {
+                cancellation.unregister(socket)
+            }
         }
     } catch (_: SocketTimeoutException) {
-        DnsUpstreamResult.Failure("dns_upstream_tcp_timeout")
+        if (cancellation.isCancelled) DnsUpstreamResult.Cancelled else DnsUpstreamResult.Failure("dns_upstream_tcp_timeout")
     } catch (_: EOFException) {
-        DnsUpstreamResult.Failure("dns_upstream_tcp_response_incomplete")
+        if (cancellation.isCancelled) DnsUpstreamResult.Cancelled else DnsUpstreamResult.Failure("dns_upstream_tcp_response_incomplete")
     } catch (_: SecurityException) {
-        DnsUpstreamResult.Failure("dns_upstream_tcp_security_error")
+        if (cancellation.isCancelled) DnsUpstreamResult.Cancelled else DnsUpstreamResult.Failure("dns_upstream_tcp_security_error")
     } catch (_: IOException) {
-        DnsUpstreamResult.Failure("dns_upstream_tcp_io_error")
+        if (cancellation.isCancelled) DnsUpstreamResult.Cancelled else DnsUpstreamResult.Failure("dns_upstream_tcp_io_error")
     } catch (_: IllegalArgumentException) {
         DnsUpstreamResult.Failure("dns_upstream_tcp_endpoint_invalid")
     }
