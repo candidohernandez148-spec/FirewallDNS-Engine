@@ -8,17 +8,22 @@
 
 ## Decisiones
 - Cada decisión incluye motivo y procedencia.
-- Las heurísticas no anulan silenciosamente reglas explícitas del usuario.
+- Las heurísticas no anulan silenciosamente reglas explícitas.
 - OBSERVE nunca se presenta como BLOCK.
-- Reglas aprendidas con caducidad, límites y revisión.
-- Allowlist explícita y pruebas para apps esenciales y del sistema.
+- Reglas aprendidas requieren límites, caducidad y revisión.
+- Allowlist explícita y pruebas para aplicaciones esenciales y del sistema.
 
-## Fallos
+## Inteligencia local inicial
+- Los indicadores incorporados son una base pequeña y curada para dominios de publicidad y tracking; no representan un feed completo de malware o phishing.
+- Las señales léxicas débiles producen OBSERVE, nunca BLOCK.
+- Solo indicadores confiables con confianza alta y fuente no aprendida pueden sugerir BLOCK.
+- Las reglas explícitas del usuario se evalúan antes de la inteligencia de amenazas.
+- La allowlist protege dominios esenciales frente a heurísticas, pero no invalida una regla explícita del usuario ni un indicador confiable específico.
+
+## Fallos y límites
 - Definir por componente si un error permite, bloquea o degrada.
 - Un fallo de almacenamiento o monitorización no cambia silenciosamente la política.
 - Colas y cachés con límites para evitar consumo ilimitado.
-
-## Inteligencia local inicial\n- Los indicadores incorporados son una base pequeña y curada para dominios de publicidad y tracking; no representan un feed completo de malware o phishing.\n- Las señales léxicas débiles producen OBSERVE, nunca BLOCK.\n- Solo indicadores confiables con confianza alta y fuente no aprendida pueden sugerir BLOCK.\n- Las reglas explícitas del usuario se evalúan antes de la inteligencia de amenazas.\n- La allowlist protege dominios esenciales frente a heurísticas, pero no invalida una regla explícita del usuario ni un indicador confiable específico.\n\n## Límites
 - No afirmar inspección de HTTPS, DoH o DoT si solo se observan metadatos.
 - No inferir identidad de aplicación sin evidencia Android.
 - No almacenar contenido de paquetes si bastan metadatos.
