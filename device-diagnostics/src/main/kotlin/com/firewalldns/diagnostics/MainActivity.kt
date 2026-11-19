@@ -86,8 +86,13 @@ class MainActivity : Activity() {
                     runButton.isEnabled = true
                 }
             } catch (failure: Throwable) {
+                val detail = failure.message ?: "sin detalle"
+                val advice = if (detail.contains("EPERM", ignoreCase = true) ||
+                    detail.contains("operation not permitted", ignoreCase = true)) {
+                    "\n\nAndroid rechazó la apertura o el uso de un socket. Si FirewallDNS u otra VPN está activa, pausa temporalmente esa VPN y vuelve a probar. No cambies los DNS del sistema."
+                } else ""
                 runOnUiThread {
-                    status.text = "La prueba no terminó: ${failure.javaClass.simpleName}: ${failure.message ?: "sin detalle"}"
+                    status.text = "La prueba no terminó: ${failure.javaClass.simpleName}: $detail$advice"
                     runButton.isEnabled = true
                 }
             }
