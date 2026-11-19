@@ -2,10 +2,16 @@
 
 Motor independiente de filtrado y protección de red para Android. Este repositorio se desarrolla separado de [FirewallDNS](https://github.com/candidohernandez148-spec/FirewallDNS) y no modifica ni sustituye su implementación actual.
 
-> Estado: **fundamentos y arquitectura**. Todavía no es un motor ejecutable ni debe utilizarse para proteger tráfico real.
+> Estado: **prototipo Kotlin/JVM en desarrollo**. El núcleo de políticas y un adaptador DNS inicial están implementados en una rama de trabajo; todavía no es un motor listo para proteger tráfico real.
 
 ## Objetivo
 Crear un motor rápido, explicable y comprobable que centralice decisiones de red, filtrado DNS, políticas por aplicación, señales locales de amenazas y observabilidad. La prioridad es la fiabilidad del filtrado, la baja latencia y evitar falsos positivos.
+
+## Componentes implementados en la rama de trabajo
+- `engine-core`: reglas BLOCK / OBSERVE / ALLOW, normalización de dominios, reglas por aplicación, prioridades, caducidad y publicación atómica de snapshots.
+- `dns-engine`: parser estricto para consultas DNS de una pregunta, validación de EDNS(0), evaluación con el motor de políticas y respuesta NXDOMAIN sintética para bloqueos.
+
+El parser DNS actual acepta consultas IN con una pregunta y, opcionalmente, un único registro EDNS(0) OPT. No implementa transporte UDP/TCP, reenvío a upstream, fragmentación, DNS TCP ni integración VPN. Los tipos de registro se filtran por nombre de dominio, no se interpretan sus RDATA.
 
 ## Decisiones iniciales
 - Repositorio privado durante el desarrollo.
@@ -19,8 +25,6 @@ Crear un motor rápido, explicable y comprobable que centralice decisiones de re
 ## Módulos previstos
 engine-core, policy-engine, dns-engine, packet-engine, connection-engine, app-identity, threat-engine, fast-cache y engine-monitor.
 
-Son límites lógicos iniciales; la separación en módulos Gradle se hará cuando se confirmen lenguaje, dependencias y contratos.
-
 ## Documentación
 - [Arquitectura](docs/ARCHITECTURE.md)
 - [Hoja de ruta](docs/ROADMAP.md)
@@ -28,10 +32,7 @@ Son límites lógicos iniciales; la separación en módulos Gradle se hará cuan
 - [Seguridad y privacidad](docs/SECURITY.md)
 - [Instrucciones para agentes](AGENTS.md)
 
-## Primer hito
-Definir contratos puros de políticas y construir un núcleo pequeño y testeable. Antes se cerrarán las decisiones tecnológicas y se validará una prueba técnica aislada del transporte.
-
-## No objetivos de la primera entrega
+## No objetivos actuales
 - Reimplementar toda la pila TCP/IP.
 - Inspeccionar contenido cifrado sin capacidad real para hacerlo.
 - Integrar o reemplazar componentes de FirewallDNS.
