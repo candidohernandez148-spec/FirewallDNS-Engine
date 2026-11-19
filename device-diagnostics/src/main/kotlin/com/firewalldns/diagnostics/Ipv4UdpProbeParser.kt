@@ -53,15 +53,15 @@ internal object Ipv4UdpProbeParser {
         if ((fragment and 0x3fff) != 0) {
             return rejected("fragmented_ipv4", length, version, protocol, destination)
         }
-        if (destinationValue(packet) != DESTINATION_IPV4) {
-            return rejected("wrong_destination", length, version, protocol, destination)
-        }
         if (totalLength < headerLength + 8) {
             return rejected("truncated_udp_header", length, version, protocol, destination)
         }
         val udpOffset = headerLength
         val udpLength = u16(packet, udpOffset + 4)
         val destinationPort = u16(packet, udpOffset + 2)
+        if (destinationValue(packet) != DESTINATION_IPV4) {
+            return rejected("wrong_destination", length, version, protocol, destination, destinationPort, udpLength)
+        }
         if (udpLength < 8 || udpOffset + udpLength > totalLength) {
             return rejected("invalid_udp_length", length, version, protocol, destination, destinationPort, udpLength)
         }
