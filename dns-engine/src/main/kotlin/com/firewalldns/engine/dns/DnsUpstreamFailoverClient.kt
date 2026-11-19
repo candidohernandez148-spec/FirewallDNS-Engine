@@ -42,8 +42,26 @@ class DnsUpstreamFailoverClient(
     }
 
     private fun isRetryableUpstreamFailure(reason: String): Boolean =
-        reason.startsWith("dns_upstream_udp_") &&
-            reason != "dns_upstream_udp_socket_protection_failed" ||
-        reason.startsWith("dns_upstream_tcp_") &&
-            reason != "dns_upstream_tcp_socket_protection_failed"
+        reason in RETRYABLE_FAILURES ||
+            reason.startsWith("dns_upstream_response_") ||
+            reason in RESPONSE_MISMATCH_FAILURES
+
+    private companion object {
+        val RETRYABLE_FAILURES = setOf(
+            "dns_upstream_udp_timeout",
+            "dns_upstream_udp_io_error",
+            "dns_upstream_tcp_timeout",
+            "dns_upstream_tcp_io_error",
+            "dns_upstream_tcp_response_incomplete",
+            "dns_upstream_tcp_frame_too_short",
+            "dns_upstream_tcp_response_truncated",
+        )
+        val RESPONSE_MISMATCH_FAILURES = setOf(
+            "dns_upstream_transaction_id_mismatch",
+            "dns_upstream_packet_is_not_response",
+            "dns_upstream_opcode_mismatch",
+            "dns_upstream_query_mismatch",
+            "dns_upstream_question_mismatch",
+        )
+    }
 }
