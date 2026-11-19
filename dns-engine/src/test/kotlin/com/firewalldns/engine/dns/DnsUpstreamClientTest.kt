@@ -29,7 +29,7 @@ class DnsUpstreamClientTest {
 
             val result = DnsUpstreamClient(
                 DnsUpstreamConfig("127.0.0.1", server.localPort, timeoutMillis = 2_000),
-                NoOpDnsSocketProtector,
+                TestDnsSocketProtector,
             ).exchange(query)
 
             responder.join(2_000)
@@ -54,7 +54,7 @@ class DnsUpstreamClientTest {
 
             val result = DnsUpstreamClient(
                 DnsUpstreamConfig("127.0.0.1", server.localPort, timeoutMillis = 2_000),
-                NoOpDnsSocketProtector,
+                TestDnsSocketProtector,
             ).exchange(query)
 
             responder.join(2_000)
@@ -79,7 +79,7 @@ class DnsUpstreamClientTest {
 
             val result = DnsUpstreamClient(
                 DnsUpstreamConfig("127.0.0.1", server.localPort, timeoutMillis = 2_000),
-                NoOpDnsSocketProtector,
+                TestDnsSocketProtector,
             ).exchange(query)
 
             responder.join(2_000)
@@ -104,7 +104,7 @@ class DnsUpstreamClientTest {
 
             val result = DnsUpstreamClient(
                 DnsUpstreamConfig("127.0.0.1", server.localPort, timeoutMillis = 2_000),
-                NoOpDnsSocketProtector,
+                TestDnsSocketProtector,
             ).exchange(query)
 
             responder.join(2_000)
@@ -119,7 +119,7 @@ class DnsUpstreamClientTest {
         DatagramSocket(0, InetAddress.getByName("127.0.0.1")).use { server ->
             val result = DnsUpstreamClient(
                 DnsUpstreamConfig("127.0.0.1", server.localPort, timeoutMillis = 100),
-                NoOpDnsSocketProtector,
+                TestDnsSocketProtector,
             ).exchange(query("example.com"))
             assertEquals(
                 "dns_upstream_udp_timeout",
@@ -133,6 +133,7 @@ class DnsUpstreamClientTest {
             val query = query("example.com")
             val protector = object : DnsSocketProtector {
                 override fun protect(socket: DatagramSocket): Boolean = false
+                override fun protect(socket: java.net.Socket): Boolean = true
             }
             val result = DnsUpstreamClient(
                 DnsUpstreamConfig("127.0.0.1", server.localPort),
@@ -177,7 +178,7 @@ class DnsUpstreamClientTest {
 
                 val result = DnsUpstreamClient(
                     DnsUpstreamConfig("127.0.0.1", tcpServer.localPort, timeoutMillis = 2_000),
-                    NoOpDnsSocketProtector,
+                    TestDnsSocketProtector,
                 ).exchange(query)
 
                 udpResponder.join(2_000)
@@ -189,8 +190,44 @@ class DnsUpstreamClientTest {
     }
 
     @Test fun rejectsMalformedQueryBeforeOpeningSocket() {
-        val result = DnsUpstreamClient(DnsUpstreamConfig("127.0.0.1"), NoOpDnsSocketProtector).exchange(byteArrayOf(1, 2, 3))
+        val result = DnsUpstreamClient(DnsUpstreamConfig("127.0.0.1"), TestDnsSocketProtector).exchange(byteArrayOf(1, 2, 3))
         assertEquals("dns_header_truncated", assertIs<DnsUpstreamResult.Failure>(result).reason)
+    }
+
+    @Test fun refusesTcpFallbackWhenSocketCannotBeProtected() {
+        java.net.ServerSocket(0, 1, InetAddress.getByName("127.0.0.1")).use { tcpServer ->
+            tcpServer.soTimeout = 2_000
+            DatagramSocket(tcpServer.localPort, InetAddress.getByName("127.0.0.1")).use { udpServer ->
+                udpServer.soTimeout = 2_000
+                val query = query("example.com")
+                val udpResponder = thread {
+                    val incoming = DatagramPacket(ByteArray(512), 512)
+                    udpServer.receive(incoming)
+                    val truncated = responseFor(query).also {
+                        it[2] = 0x83.toByte()
+                    }
+                    udpServer.send(DatagramPacket(truncated, truncated.size, incoming.socketAddress))
+                }
+                val protector = object : DnsSocketProtector {
+                    override fun protect(socket: DatagramSocket): Boolean = true
+                    override fun protect(socket: java.net.Socket): Boolean = false
+                }
+                val result = DnsUpstreamClient(
+                    DnsUpstreamConfig("127.0.0.1", tcpServer.localPort, timeoutMillis = 2_000),
+                    protector,
+                ).exchange(query)
+                udpResponder.join(2_000)
+                assertEquals(
+                    "dns_upstream_tcp_socket_protection_failed",
+                    assertIs<DnsUpstreamResult.Failure>(result).reason,
+                )
+            }
+        }
+    }
+
+    private object TestDnsSocketProtector : DnsSocketProtector {
+        override fun protect(socket: DatagramSocket): Boolean = true
+        override fun protect(socket: java.net.Socket): Boolean = true
     }
 
     private fun query(domain: String, dnsClass: Int = 1): ByteArray {
