@@ -45,8 +45,14 @@ class AndroidUdpFlowManager(
 ) : AutoCloseable {
     private val flowLimit = maxFlows.also { require(it in 1..MAX_ALLOWED_FLOWS) }
     private val queueLimit = maxQueuedDatagramsPerFlow.also { require(it in 1..MAX_ALLOWED_QUEUE_CAPACITY) }
-    private val datagramLimit = maxDatagramBytes.also { require(it in 1..DEFAULT_MAX_DATAGRAM_BYTES) }
+    private val datagramLimit = maxDatagramBytes.also { require(it in 1..MAX_ALLOWED_DATAGRAM_BYTES) }
     private val pollTimeout = receivePollTimeoutMillis.also { require(it in 10..1_000) }
+
+    init {
+        require(flowLimit.toLong() * queueLimit.toLong() * datagramLimit.toLong() <= MAX_QUEUED_BYTES) {
+            "firewalldns_udp_queue_memory_limit_exceeded"
+        }
+    }
 
     private val lock = Any()
     private val closed = AtomicBoolean(false)
@@ -72,7 +78,7 @@ class AndroidUdpFlowManager(
             val socket = socketFactory.open(
                 remote = remote,
                 timeoutMillis = pollTimeout,
-                receiveBufferBytes = DEFAULT_RECEIVE_BUFFER_BYTES,
+                receiveBufferBytes = maxOf(MIN_RECEIVE_BUFFER_BYTES, datagramLimit),
             )
             val id = nextId.getAndIncrement()
             val flow = Flow(id, socket, listener)
@@ -179,8 +185,10 @@ class AndroidUdpFlowManager(
         const val MAX_ALLOWED_FLOWS = 128
         const val DEFAULT_QUEUE_CAPACITY = 64
         const val MAX_ALLOWED_QUEUE_CAPACITY = 256
-        const val DEFAULT_MAX_DATAGRAM_BYTES = 65_507
+        const val DEFAULT_MAX_DATAGRAM_BYTES = 1_500
+        const val MAX_ALLOWED_DATAGRAM_BYTES = 65_507
+        const val MAX_QUEUED_BYTES = 16L * 1024L * 1024L
         const val DEFAULT_RECEIVE_POLL_TIMEOUT_MILLIS = 100
-        const val DEFAULT_RECEIVE_BUFFER_BYTES = 65_507
+        const val MIN_RECEIVE_BUFFER_BYTES = 512
     }
 }
