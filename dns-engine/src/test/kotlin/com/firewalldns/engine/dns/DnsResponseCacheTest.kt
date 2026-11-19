@@ -55,12 +55,21 @@ class DnsResponseCacheTest {
         val request = query("example.com")
         assertTrue(cache.put("1.1.1.1:53", request, positiveResponse(request, 60), 0))
         assertNull(cache.get("8.8.8.8:53", request, 0))
+        val checkingDisabled = request.copyOf().also { it[3] = 0x10 }
+        assertNull(cache.get("1.1.1.1:53", checkingDisabled, 0))
         val changed = request.copyOf(request.size + 11)
         changed[11] = 1
         changed[request.size + 2] = 41
         changed[request.size + 3] = 0x04
         changed[request.size + 4] = 0xd0.toByte()
         assertNull(cache.get("1.1.1.1:53", changed, 0))
+    }
+
+    @Test fun refusesEntriesLargerThanConfiguredByteBudget() {
+        val cache = DnsResponseCache(maxBytes = 1)
+        val request = query("large.example")
+        assertFalse(cache.put("upstream", request, positiveResponse(request, 60), 0))
+        assertEquals(0, cache.size)
     }
 
     @Test fun respectsEntryBoundAndClear() {

@@ -25,7 +25,7 @@
 - Definir por componente si un error permite, bloquea o degrada.
 - Un fallo de almacenamiento o monitorización no cambia silenciosamente la política.
 - Colas y cachés con límites para evitar consumo ilimitado.
-- La caché DNS es volátil, usa expiración monotónica y no persiste consultas ni respuestas en disco. Las claves aíslan upstream, consulta y opciones EDNS; los TTL se reducen en cada respuesta servida desde caché.
+- La caché DNS es volátil, está limitada por entradas y bytes, usa expiración monotónica y no persiste consultas ni respuestas en disco. Las claves aíslan upstream, consulta y opciones EDNS; los TTL se reducen en cada respuesta servida desde caché.
 - No afirmar inspección de HTTPS, DoH o DoT si solo se observan metadatos.
 - No inferir identidad de aplicación sin evidencia Android.
 - No almacenar contenido de paquetes si bastan metadatos.

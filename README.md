@@ -6,7 +6,7 @@ Motor único e independiente de filtrado y protección de red para Android. [Fir
 
 ## Componentes implementados en la rama de trabajo
 - `engine-core`: reglas BLOCK / OBSERVE / ALLOW, normalización IDN y etiquetas DNS de servicio, reglas por aplicación, prioridades, caducidad y snapshots atómicos con revisión.
-- `dns-engine`: parser estricto de consultas DNS de una pregunta, validación EDNS(0), NXDOMAIN sintético, framing DNS-over-TCP, cliente upstream UDP con fallback TCP al recibir TC, timeouts acotados, validación de ID/pregunta y hook para proteger sockets VPN; caché acotada de decisiones con TTL y revisión de políticas, además de caché de respuestas DNS positivas/negativas con TTL y expiración monotónica.
+- `dns-engine`: parser estricto de consultas DNS de una pregunta, validación EDNS(0), NXDOMAIN sintético, framing DNS-over-TCP, cliente upstream UDP con fallback TCP al recibir TC, timeouts acotados, validación de ID/pregunta y hook para proteger sockets VPN; caché acotada de decisiones con TTL y revisión de políticas, además de caché de respuestas DNS positivas/negativas con TTL, expiración monotónica y límite de memoria.
 - `threat-engine`: indicadores curados e integrados de publicidad y tracking, allowlist de dominios esenciales y heurísticas conservadoras; no aprende ni persiste conocimiento.
 - `engine-monitor`: métricas locales y cola de eventos acotada, sin I/O en la ruta crítica y con dominios/paquetes redactados por defecto.
 - `engine-runtime`: fachada pública única que coordina políticas, DNS, amenazas y monitorización para el adaptador Android.

@@ -11,19 +11,22 @@ import kotlin.concurrent.withLock
  * Keys include the upstream endpoint and the complete query wire image, except
  * transaction ID and RD bit; CD remains part of the key. This avoids sharing
  * answers across EDNS options, client subnets, cookies, question casing, or other
- * query variants. Expiration
- * uses a monotonic nanosecond clock; no disk or network I/O occurs here.
+ * query variants. Storage is bounded by entry count and total response bytes.
+ * Expiration uses a monotonic nanosecond clock; no disk or network I/O occurs here.
  */
 class DnsResponseCache(
     private val maxEntries: Int = DEFAULT_MAX_ENTRIES,
+    private val maxBytes: Int = DEFAULT_MAX_BYTES,
     private val maxTtlSeconds: Long = DEFAULT_MAX_TTL_SECONDS,
 ) {
     private data class Entry(val response: ByteArray, val insertedAtNanos: Long, val ttlNanos: Long)
     private val entries = ConcurrentHashMap<String, Entry>()
     private val writeLock = ReentrantLock()
+    private var currentBytes: Int = 0
 
     init {
         require(maxEntries > 0) { "maxEntries must be positive" }
+        require(maxBytes > 0) { "maxBytes must be positive" }
         require(maxTtlSeconds in 1..(Long.MAX_VALUE / NANOS_PER_SECOND)) { "maxTtlSeconds is out of range" }
     }
 
@@ -31,10 +34,7 @@ class DnsResponseCache(
         val parsed = DnsMessageParser.parse(query) as? DnsParseResult.Valid ?: return null
         val cacheEntry = entries[key(upstream, query)] ?: return null
         val elapsedNanos = nowNanos - cacheEntry.insertedAtNanos
-        if (elapsedNanos < 0L || elapsedNanos >= cacheEntry.ttlNanos) {
-            entries.remove(key(upstream, query), cacheEntry)
-            return null
-        }
+        if (elapsedNanos < 0L || elapsedNanos >= cacheEntry.ttlNanos) return null
         val remainingNanos = cacheEntry.ttlNanos - elapsedNanos
         val remainingSeconds = ((remainingNanos - 1L) / NANOS_PER_SECOND) + 1L
         val response = cacheEntry.response.copyOf()
@@ -61,19 +61,28 @@ class DnsResponseCache(
         val boundedTtl = minOf(ttlSeconds, maxTtlSeconds)
         val ttlNanos = boundedTtl * NANOS_PER_SECOND
         val stored = response.copyOf()
+        if (stored.size > maxBytes) return false
         val cacheKey = key(upstream, query)
         writeLock.withLock {
-            entries.entries.removeIf { isExpired(it.value, nowNanos) }
-            if (!entries.containsKey(cacheKey) && entries.size >= maxEntries) {
-                entries.keys.firstOrNull()?.let(entries::remove)
+            removeExpiredEntries(nowNanos)
+            entries.remove(cacheKey)?.let { currentBytes -= it.response.size }
+            while (entries.isNotEmpty() &&
+                (entries.size >= maxEntries || currentBytes + stored.size > maxBytes)
+            ) {
+                val victim = entries.entries.firstOrNull() ?: break
+                if (entries.remove(victim.key, victim.value)) currentBytes -= victim.value.response.size
             }
             entries[cacheKey] = Entry(stored, nowNanos, ttlNanos)
+            currentBytes += stored.size
         }
         return true
     }
 
     fun clear() {
-        writeLock.withLock { entries.clear() }
+        writeLock.withLock {
+            entries.clear()
+            currentBytes = 0
+        }
     }
 
     val size: Int get() = entries.size
@@ -81,6 +90,14 @@ class DnsResponseCache(
     private fun isExpired(entry: Entry, nowNanos: Long): Boolean {
         val elapsedNanos = nowNanos - entry.insertedAtNanos
         return elapsedNanos < 0L || elapsedNanos >= entry.ttlNanos
+    }
+
+    private fun removeExpiredEntries(nowNanos: Long) {
+        entries.entries.toList().forEach { (key, entry) ->
+            if (isExpired(entry, nowNanos) && entries.remove(key, entry)) {
+                currentBytes -= entry.response.size
+            }
+        }
     }
 
     private fun key(upstream: String, query: ByteArray): String {
@@ -236,6 +253,7 @@ class DnsResponseCache(
 
     private companion object {
         const val DEFAULT_MAX_ENTRIES = 2_048
+        const val DEFAULT_MAX_BYTES = 4 * 1024 * 1024
         const val DEFAULT_MAX_TTL_SECONDS = 86_400L
         const val NANOS_PER_SECOND = 1_000_000_000L
         const val DNS_HEADER_SIZE = 12
