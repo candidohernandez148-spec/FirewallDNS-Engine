@@ -10,7 +10,7 @@ Motor único e independiente de filtrado y protección de red para Android. [Fir
 - `threat-engine`: indicadores curados e integrados de publicidad y tracking, allowlist de dominios esenciales y heurísticas conservadoras; no aprende ni persiste conocimiento.
 - `engine-monitor`: métricas locales y cola de eventos acotada, sin I/O en la ruta crítica y con dominios/paquetes redactados por defecto.
 - `engine-runtime`: fachada pública única que coordina políticas, DNS, amenazas y monitorización para el adaptador Android.
-- `android-adapter`: biblioteca Android aislada que conecta la protección de sockets UDP/TCP con `VpnService.protect()`; aún no está integrada en el servicio VPN de FirewallDNS.
+- `android-adapter`: biblioteca Android aislada con `AndroidDnsSocketProtector` y `AndroidEngineRuntime`, que compone la fachada única del motor y crea clientes DNS failover con protección obligatoria de sockets UDP/TCP mediante `VpnService.protect()`; todavía no está integrada en el servicio VPN de FirewallDNS ni procesa paquetes TUN.
 
 El parser DNS acepta consultas de una pregunta y, opcionalmente, un único registro EDNS(0) OPT. El cliente upstream ya realiza intercambios UDP y fallback DNS-over-TCP, pero debe invocarse fuera de la ruta crítica y exige una estrategia explícita de protección de sockets; el adaptador Android debe conectarla con `VpnService.protect`. La caché de respuestas DNS está integrada en el cliente upstream; no implementa todavía gestión de flujos, fragmentación ni integración TUN. La inteligencia de amenazas es una base local inicial, no un feed exhaustivo de malware/phishing ni una garantía de detección. Los tipos de registro se filtran por nombre de dominio, no se interpretan sus RDATA.
 
@@ -23,6 +23,10 @@ El parser DNS acepta consultas de una pregunta y, opcionalmente, un único regis
 - Monitorización con cola limitada y datos sensibles desactivados por defecto.
 - No se reimplementará TCP/IP desde cero sin evidencia y benchmark.
 - Firestack es únicamente una referencia de paridad; no será una dependencia ni un motor alternativo en la arquitectura final. Su retirada de Android ocurrirá después de superar pruebas funcionales, seguridad y rendimiento en hardware real.
+
+## Integración Android
+
+El anfitrión crea `AndroidEngineRuntime` desde la instancia activa de `VpnService`, usa `engine` para las decisiones y `createDnsFailover(...)` para upstream DNS. Los intercambios son síncronos: deben ejecutarse en un dispatcher/hilo de I/O, nunca en el hilo principal ni en el bucle de paquetes. La instancia debe descartarse al destruirse el servicio. La prueba JVM verifica que el cliente upstream pasa por `VpnService.protect()`; usa un servicio simulado y loopback, por lo que no demuestra aún protección real dentro de un túnel activo.
 
 ## Módulos
 engine-core, dns-engine, threat-engine, engine-monitor y engine-runtime. app-identity, packet-engine y connection-engine son capacidades pendientes, no módulos implementados.
