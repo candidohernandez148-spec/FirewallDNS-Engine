@@ -95,7 +95,7 @@ class ThreatAnalyzer(
         val labels = domain.split('.')
         val signals = buildList {
             if (labels.any { label ->
-                    label == "ad" || label == "ads" || label.contains("advert") || label.contains("banner")
+                    label == "ad" || label == "ads" || label.startsWith("ads-") || label.endsWith("-ads") || label.contains("advert") || label.contains("banner")
                 }) {
                 add(
                     ThreatSignal(
