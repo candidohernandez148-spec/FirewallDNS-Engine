@@ -104,3 +104,11 @@ El módulo `:android-adapter` se valida en CI con `gradle test` y `gradle :andro
 - Los contadores BLOCK/OBSERVE/ALLOW/REJECTED pertenecen al monitor del runtime y representan evaluaciones de política; no se deben sumar ni comparar directamente con `responses_out`. Una evaluación puede no producir respuesta (por ejemplo, rechazo) y una respuesta puede fallar después en el transporte.
 - El informe no registra dominios, direcciones, consultas ni payloads. Repetir la prueba durante 15 minutos (900 s), detener desde la pantalla y guardar el JSON final. Confirmar manualmente que el estado sea `stopped`, que el archivo incluya `schema_version: 2` y que el contador de duración se aproxime al tiempo real.
 - Limitación: los contadores son instantáneas concurrentes; durante una parada abrupta pueden quedar tareas en ejecución al emitirse el último broadcast. No usar aún el informe para declarar cero pérdidas ni para aprobar integración de producción. La validación de cierre consistente y la prueba física de 15 minutos siguen siendo obligatorias.
+
+
+## Núcleo Rust/JNI experimental
+
+- La suite Rust ejecuta fixtures deterministas IPv4/IPv6, checksum IPv4, checksum UDP IPv6 obligatorio, puerto DNS, truncamiento y fragmentación IPv4: cargo test --manifest-path rust-core/Cargo.toml.
+- CI compila libfirewalldns_native.so para arm64-v8a con cargo-ndk y la empaqueta en android-adapter/jniLibs antes de ensamblar los artefactos Android.
+- NativePacketCoreInstrumentedTest confirma en un dispositivo/emulador ARM64 que la biblioteca se carga mediante JNI y rechaza un paquete truncado.
+- Esta prueba confirma carga e invocación, no rendimiento ni paridad completa. Antes de usar Rust en la ruta TUN se requiere un benchmark A/B Kotlin/Rust con fixtures idénticos, throughput, P50/P95/P99, CPU, memoria y consumo en el Samsung A34 5G.

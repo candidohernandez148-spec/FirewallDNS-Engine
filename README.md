@@ -33,6 +33,7 @@ engine-core, dns-engine, threat-engine, engine-monitor y engine-runtime. app-ide
 
 ## Documentación
 - [Arquitectura](docs/ARCHITECTURE.md)
+- [Núcleo nativo Rust experimental](docs/RUST_CORE.md)
 - [Plan de sustitución e integración](docs/INTEGRATION_PLAN.md)
 - [Hoja de ruta](docs/ROADMAP.md)
 - [Estrategia de pruebas](docs/TESTING.md)
@@ -44,3 +45,8 @@ engine-core, dns-engine, threat-engine, engine-monitor y engine-runtime. app-ide
 - Inspeccionar contenido cifrado sin capacidad real para hacerlo.
 - Retirar Firestack antes de validar la paridad y seguridad del motor nuevo.
 - Aprender o entrenar modelos con el historial de tráfico del usuario.
+
+
+## Experimento nativo Rust
+
+Se añadió un núcleo Rust aislado para validar paquetes UDP DNS IPv4/IPv6 mediante JNI. Se compila para arm64-v8a y se incluye en los artefactos Android de CI. Es una etapa de comparación: Kotlin conserva la autoridad de procesamiento y decisiones, y el JNI no está conectado a la ruta de producción hasta demostrar una mejora medible. Consulta docs/RUST_CORE.md.

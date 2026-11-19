@@ -47,6 +47,8 @@
 - Metadatos TCP/UDP sin fingir inspección de contenido cifrado.
 
 ## Fase 5 — Adaptador VPN y transporte
+- [x] Añadir núcleo Rust/JNI experimental para validación estructural de paquetes DNS UDP IPv4/IPv6, aislado de la ruta de producción y compilado para arm64-v8a.
+- [ ] Benchmark A/B Rust frente a Kotlin en Samsung A34 5G y decisión documentada antes de activar el núcleo nativo.
 - [x] Prototipo aislado VpnService/TUN para DNS UDP real, limitado a direcciones virtuales y con upstream protegido (diagnóstico; no es VPN de tráfico general).
 - Evaluar stack probado frente a alternativas nativas.
 - [x] Procesamiento inicial de UDP DNS IPv4/IPv6 básico, checksum de respuestas y decisiones BLOCK/OBSERVE/ALLOW con pruebas unitarias.
