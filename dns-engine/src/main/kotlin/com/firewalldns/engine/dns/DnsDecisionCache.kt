@@ -65,7 +65,7 @@ class DnsDecisionCache(
         get() = entries.size
 
     private fun safeAdd(left: Long, right: Long): Long =
-        if (Long.MAX_VALUE - left < right) Long.MAX_VALUE else left + right
+        if (left > Long.MAX_VALUE - right) Long.MAX_VALUE else left + right
 
     private companion object {
         const val DEFAULT_MAX_ENTRIES = 4_096
