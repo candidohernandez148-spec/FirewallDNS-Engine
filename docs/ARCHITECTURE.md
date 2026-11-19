@@ -6,7 +6,7 @@ Construir un motor de filtrado y protección de red para Android, desacoplado de
 ## Principios
 1. Una sola autoridad de políticas: BLOCK, OBSERVE o ALLOW.
 2. La ruta crítica no realiza I/O de disco, operaciones de red ni trabajo pesado.
-3. Datos locales por defecto: aprendizaje, historial y reglas permanecen en el dispositivo.
+3. Conocimiento determinista: indicadores y heurísticas integrados/curados; no hay aprendizaje persistente ni entrenamiento con el tráfico del usuario.
 4. Fail-safe explícito: cada error tiene comportamiento definido.
 5. Separación entre plano de control y plano de datos.
 6. Medición antes de optimización: latencia P50/P95, throughput, CPU, memoria, batería y pérdidas.
@@ -21,7 +21,7 @@ Construir un motor de filtrado y protección de red para Android, desacoplado de
 | packet-engine | Adaptador TUN y límites con el stack de red |
 | connection-engine | Flujos TCP/UDP y ciclo de vida |
 | app-identity | Asociación UID/paquete cuando Android lo permita |
-| threat-engine | Señales de riesgo, reputación local y aprendizaje |
+| threat-engine | Indicadores de riesgo integrados/curados y heurísticas deterministas |
 | fast-cache | Cachés concurrentes con TTL y límites |
 | engine-monitor | Métricas, eventos y diagnóstico no bloqueante |
 
@@ -48,9 +48,9 @@ OBSERVE registra señales y permite el tráfico; no equivale a bloquear.
 ## Estrategia de transporte
 Definir interfaces y medir alternativas. Se prefiere integrar un stack probado antes que implementar TCP/IP desde cero. Firestack se toma como referencia temporal para inventariar capacidades y comparar resultados, no como motor alternativo ni dependencia objetivo. FirewallDNS-Engine será la única autoridad de políticas y filtrado. La retirada de Firestack en Android se habilita solo cuando el motor nuevo cubra las capacidades necesarias y supere pruebas de compatibilidad, seguridad, estabilidad y rendimiento.
 
-## Estado del prototipo de inteligencia local
+## Inteligencia integrada sin aprendizaje persistente
 
-El módulo `threat-engine` incorpora una lista pequeña de indicadores publicitarios y de tracking. Los indicadores de publicidad de alta confianza pueden sugerir BLOCK; los endpoints de tracking seleccionados sugieren OBSERVE. Las heurísticas por etiquetas DNS (por ejemplo, términos de anuncios o tracking) solo sugieren OBSERVE. Una allowlist evita que estas heurísticas afecten dominios esenciales conocidos. Las reglas explícitas del usuario se evalúan antes y prevalecen. No hay todavía feed firmado ni cobertura exhaustiva de malware/phishing.
+El módulo `threat-engine` utiliza indicadores integrados y curados de publicidad y tracking. Las señales de alta confianza pueden sugerir BLOCK según las reglas y prioridades definidas; las heurísticas débiles solo sugieren OBSERVE. Una allowlist evita afectar dominios esenciales conocidos. Las reglas explícitas del usuario se evalúan antes y prevalecen. El motor no aprende del tráfico, no entrena modelos localmente y no guarda conocimiento derivado de consultas. La mejora de cobertura se realiza mediante versiones revisadas de indicadores y reglas, con pruebas antes de distribuirlas. No hay todavía feed firmado ni cobertura exhaustiva de malware/phishing.
 
 ## Estado del monitor local
 
@@ -64,11 +64,12 @@ El codec DNS-over-TCP maneja el prefijo de longitud de dos bytes. `DnsUpstreamCl
 
 Las clases DNS distintas de IN se pasan sin aplicar políticas de dominio. Los tipos A/AAAA y otros tipos IN se evalúan por nombre; el módulo no interpreta RDATA ni genera respuestas A/AAAA permitidas.
 
-## Caché de decisiones DNS\n\nLa caché de decisiones está acotada por número de entradas, usa TTL corto y la revisión monotónica del snapshot de políticas como parte de la clave. La caducidad de una regla limita también la vida de su decisión cacheada. Las lecturas son concurrentes y sin bloqueo; las escrituras usan un bloqueo breve únicamente para mantener el límite estricto. Esta caché no almacena respuestas DNS ni sustituye la futura caché positiva/negativa de respuestas.\n\n## Concurrencia y persistencia
-- Evaluación síncrona, acotada y sin disco en la ruta crítica.
-- Room/SQLite fuera de la ruta crítica; WAL se evaluará con mediciones.
+## Caché de decisiones DNS\n\nLa caché de decisiones está acotada por número de entradas, usa TTL corto y la revisión monotónica del snapshot de políticas como parte de la clave. La caducidad de una regla limita también la vida de su decisión cacheada. Las lecturas son concurrentes y sin bloqueo; las escrituras usan un bloqueo breve únicamente para mantener el límite estricto. Esta caché no almacena respuestas DNS ni sustituye la futura caché positiva/negativa de respuestas.\n\n## Concurrencia y estado
+- Evaluación acotada y sin I/O de disco en la ruta crítica.
+- No se implementará persistencia de aprendizaje, entrenamiento local ni base de datos de conocimiento derivado del tráfico.
 - Reglas activas como snapshots inmutables.
-- Cachés con TTL, límites e invalidación explícita.
+- Cachés operativas con TTL, límites e invalidación explícita; no son aprendizaje y no sobreviven como conocimiento aprendido.
+- La configuración explícita del usuario y las listas curadas podrán persistirse en la capa de aplicación, separadas de cualquier aprendizaje.
 - Colas de eventos acotadas; la saturación se contabiliza sin detener el filtrado.
 
 ## Evolución
