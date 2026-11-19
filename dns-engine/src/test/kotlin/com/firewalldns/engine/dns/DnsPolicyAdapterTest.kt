@@ -57,6 +57,20 @@ class DnsPolicyAdapterTest {
         assertIs<DnsEvaluation.Forward>(DnsPolicyAdapter(PolicyEngine()).evaluate(packet))
     }
 
+    @Test fun rejectsTruncatedEdnsOptionTlv() {
+        val base = query("example.com")
+        val packet = base.copyOf(base.size + 12)
+        packet[11] = 1
+        packet[base.size] = 0
+        packet[base.size + 1] = 0
+        packet[base.size + 2] = 41
+        packet[base.size + 3] = 0x04
+        packet[base.size + 4] = 0xd0.toByte()
+        packet[base.size + 9] = 0
+        packet[base.size + 10] = 1 // One RDATA byte cannot contain an EDNS option header.
+        assertIs<DnsEvaluation.Rejected>(DnsPolicyAdapter(PolicyEngine()).evaluate(packet))
+    }
+
     @Test fun blockedEdnsQueryRetainsOptRecordInResponse() {
         val base = query("ads.example.com")
         val packet = base.copyOf(base.size + 11)
