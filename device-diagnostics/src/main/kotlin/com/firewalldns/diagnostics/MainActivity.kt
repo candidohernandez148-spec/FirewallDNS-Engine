@@ -18,6 +18,7 @@ import com.firewalldns.engine.dns.DnsUpstreamTransport
 import java.net.DatagramPacket
 import java.net.DatagramSocket
 import java.net.InetAddress
+import java.net.InetSocketAddress
 import java.net.Socket
 import java.time.Instant
 import kotlin.concurrent.thread
@@ -31,6 +32,7 @@ class MainActivity : Activity() {
     private lateinit var runButton: Button
     private lateinit var exportButton: Button
     private var reportJson: String? = null
+    @Volatile private var diagnosticStage: String = "not_started"
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -87,12 +89,27 @@ class MainActivity : Activity() {
                 }
             } catch (failure: Throwable) {
                 val detail = failure.message ?: "sin detalle"
-                val advice = if (detail.contains("EPERM", ignoreCase = true) ||
-                    detail.contains("operation not permitted", ignoreCase = true)) {
-                    "\n\nAndroid rechazó la apertura o el uso de un socket. Si FirewallDNS u otra VPN está activa, pausa temporalmente esa VPN y vuelve a probar. No cambies los DNS del sistema."
-                } else ""
+                val report = """
+                    {
+                      "format": "firewalldns-device-diagnostic-failure-v1",
+                      "created_at_utc": "${Instant.now()}",
+                      "device": {
+                        "manufacturer": ${jsonString(Build.MANUFACTURER)},
+                        "model": ${jsonString(Build.MODEL)},
+                        "android_release": ${jsonString(Build.VERSION.RELEASE)},
+                        "sdk_int": ${Build.VERSION.SDK_INT}
+                      },
+                      "vpn_active": false,
+                      "stage": ${jsonString(diagnosticStage)},
+                      "exception": ${jsonString(failure.javaClass.name)},
+                      "message": ${jsonString(detail)},
+                      "personal_dns_queries_collected": false
+                    }
+                """.trimIndent()
+                reportJson = report
                 runOnUiThread {
-                    status.text = "La prueba no terminó: ${failure.javaClass.simpleName}: $detail$advice"
+                    status.text = "La prueba se detuvo en: $diagnosticStage\\n${failure.javaClass.simpleName}: $detail\\n\\nGuarda el informe JSON para identificar la operación exacta."
+                    exportButton.isEnabled = true
                     runButton.isEnabled = true
                 }
             }
@@ -103,17 +120,26 @@ class MainActivity : Activity() {
         val warmup = 30
         val samples = 250
         val total = warmup + samples
+        diagnosticStage = "resolve_loopback"
         val loopback = InetAddress.getByName("127.0.0.1")
-        DatagramSocket(0, loopback).use { server ->
+        diagnosticStage = "create_udp_socket"
+        val server = DatagramSocket(null)
+        server.use {
+            diagnosticStage = "bind_udp_socket_to_loopback"
+            server.bind(InetSocketAddress(loopback, 0))
+            diagnosticStage = "configure_udp_server_timeout"
             server.soTimeout = 15_000
             var responderError: String? = null
+            diagnosticStage = "start_local_udp_responder"
             val responder = thread(name = "firewalldns-local-dns-responder") {
                 try {
                     repeat(total) {
+                        diagnosticStage = "receive_local_udp_query"
                         val incoming = DatagramPacket(ByteArray(512), 512)
                         server.receive(incoming)
                         val request = incoming.data.copyOf(incoming.length)
                         val response = positiveResponse(request)
+                        diagnosticStage = "send_local_udp_response"
                         server.send(DatagramPacket(response, response.size, incoming.socketAddress))
                     }
                 } catch (error: Throwable) {
@@ -121,11 +147,13 @@ class MainActivity : Activity() {
                 }
             }
 
+            diagnosticStage = "create_dns_upstream_client"
             val client = DnsUpstreamClient(
                 DnsUpstreamConfig("127.0.0.1", server.localPort, timeoutMillis = 5_000),
                 NoopSocketProtector,
             )
             repeat(warmup) { index ->
+                diagnosticStage = "engine_udp_warmup_exchange"
                 val result = client.exchange(query("warm$index.device-bench.example", index))
                 check(result is DnsUpstreamResult.Success) { "falló calentamiento: $result" }
             }
@@ -133,6 +161,7 @@ class MainActivity : Activity() {
             val upstreamNanos = ArrayList<Long>(samples)
             var udpSuccesses = 0
             repeat(samples) { index ->
+                diagnosticStage = "engine_udp_sample_exchange"
                 val request = query("sample$index.device-bench.example", index + warmup)
                 val started = System.nanoTime()
                 val result = client.exchange(request)
@@ -149,6 +178,7 @@ class MainActivity : Activity() {
             val cacheNanos = ArrayList<Long>(samples)
             var cacheSuccesses = 0
             repeat(samples) { index ->
+                diagnosticStage = "engine_response_cache_sample"
                 val request = query("sample${samples - 1}.device-bench.example", (index + 1) and 0xffff)
                 val started = System.nanoTime()
                 val result = client.exchange(request)
@@ -160,6 +190,7 @@ class MainActivity : Activity() {
                 cacheSuccesses++
             }
 
+            diagnosticStage = "calculate_percentiles"
             val upstream = percentiles(upstreamNanos)
             val cache = percentiles(cacheNanos)
             val json = """
