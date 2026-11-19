@@ -7,8 +7,6 @@ import android.content.Intent
 import android.net.VpnService
 import android.os.Build
 import android.os.ParcelFileDescriptor
-import android.os.Handler
-import android.os.Looper
 import com.firewalldns.engine.android.AndroidEngineRuntime
 import com.firewalldns.engine.android.TunDnsPacketProcessor
 import com.firewalldns.engine.dns.DnsUpstreamConfig
@@ -43,10 +41,6 @@ class EngineTunVpnService : VpnService() {
     private val responsesOut = AtomicLong()
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        if (intent?.action == ACTION_STATUS_REQUEST) {
-            publish(serviceState)
-            return START_NOT_STICKY
-        }
         if (intent?.action == ACTION_STOP) {
             serviceState = "stopping"
             publish(serviceState)
@@ -244,7 +238,6 @@ class EngineTunVpnService : VpnService() {
         const val ACTION_START = "com.firewalldns.diagnostics.ENGINE_TUN_START"
         const val ACTION_STOP = "com.firewalldns.diagnostics.ENGINE_TUN_STOP"
         const val ACTION_STATUS = "com.firewalldns.diagnostics.ENGINE_TUN_STATUS"
-        const val ACTION_STATUS_REQUEST = "com.firewalldns.diagnostics.ENGINE_TUN_STATUS_REQUEST"
         const val EXTRA_STATE = "state"
         private const val IPV4_INTERFACE = "10.77.0.2"
         private const val IPV4_DNS = "10.77.0.1"
