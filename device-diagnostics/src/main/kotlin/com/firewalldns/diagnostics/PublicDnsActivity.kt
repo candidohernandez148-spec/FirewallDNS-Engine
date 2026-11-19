@@ -163,7 +163,7 @@ class PublicDnsActivity : Activity() {
         val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
             addCategory(Intent.CATEGORY_OPENABLE)
             type = "application/json"
-            putExtra(Intent.EXTRA_TITLE, "firewalldns-dns-publico.json")
+            putExtra(Intent.EXTRA_TITLE, if (content.contains("firewalldns-tun-diagnostic")) "firewalldns-diagnostico-tun.json" else "firewalldns-dns-publico.json")
         }
         pendingReport = content
         startActivityForResult(intent, 4108)
