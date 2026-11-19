@@ -7,6 +7,7 @@ import android.content.Intent
 import android.net.VpnService
 import android.os.Build
 import android.os.ParcelFileDescriptor
+import org.json.JSONObject
 import java.io.FileInputStream
 import java.net.DatagramPacket
 import java.net.DatagramSocket
