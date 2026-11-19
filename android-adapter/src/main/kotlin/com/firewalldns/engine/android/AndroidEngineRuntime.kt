@@ -25,6 +25,16 @@ class AndroidEngineRuntime(vpnService: VpnService) {
     fun createProtectedUdpSocketFactory(): AndroidProtectedUdpSocketFactory =
         AndroidProtectedUdpSocketFactory(socketProtector)
 
+    /** Creates an experimental bounded UDP flow manager; the caller owns its lifecycle. */
+    fun createUdpFlowManager(
+        maxFlows: Int = 32,
+        maxQueuedDatagramsPerFlow: Int = 64,
+    ): AndroidUdpFlowManager = AndroidUdpFlowManager(
+        socketFactory = createProtectedUdpSocketFactory(),
+        maxFlows = maxFlows,
+        maxQueuedDatagramsPerFlow = maxQueuedDatagramsPerFlow,
+    )
+
     /**
      * Builds a bounded sequential failover client whose UDP and TCP sockets
      * are protected by the active Android VpnService before connect().
