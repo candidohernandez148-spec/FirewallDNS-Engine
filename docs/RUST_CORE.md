@@ -26,9 +26,13 @@ La función devuelve:
 
 ## Validación
 
-- cargo test --manifest-path rust-core/Cargo.toml: pruebas deterministas del parser Rust.
-- cargo ndk -t arm64-v8a -o android-adapter/src/main/jniLibs build --manifest-path rust-core/Cargo.toml --release: genera libfirewalldns_native.so para empaquetarlo en Android.
-- :android-adapter:assembleDebugAndroidTest: compila la prueba instrumentada.
-- NativePacketCoreInstrumentedTest: en un dispositivo ARM64 confirma que la biblioteca incluida en el APK carga y responde a una entrada truncada.
+- `cargo test --manifest-path rust-core/Cargo.toml`: pruebas deterministas del parser Rust.
+- `cargo ndk -t arm64-v8a -o android-adapter/src/main/jniLibs build --manifest-path rust-core/Cargo.toml --release`: genera `libfirewalldns_native.so` para empaquetarlo en Android.
+- `:android-adapter:assembleDebugAndroidTest`: compila la prueba instrumentada.
+- `NativePacketCoreInstrumentedTest`: en un dispositivo ARM64 confirma que la biblioteca incluida en el APK carga, valida paquetes IPv4/IPv6 y rechaza entradas corruptas/truncadas.
+- `gradle :android-adapter:connectedDebugAndroidTest`: ejecuta en dispositivo la comprobación de paridad y el benchmark A/B de preflight Kotlin frente a JNI Rust.
+- Consultar las métricas con `adb logcat -s FirewallDNSBenchmark:I`. Se registran P50/P95/P99 en microsegundos para IPv4 e IPv6.
+
+El benchmark mide exclusivamente la validación estructural equivalente y el coste de la llamada JNI; no mide la evaluación DNS completa, upstream, `VpnService.protect()`, el TUN activo ni la radio Wi-Fi/datos. No se usa un umbral automático ni se activa Rust en producción por el mero hecho de completar el test. La adopción exige resultados repetibles en el Samsung A34 5G y ausencia de regresiones funcionales.
 
 La validación JNI en CI no demuestra rendimiento ni compatibilidad de la ruta TUN en el Galaxy A34. La adopción en producción exige pruebas comparativas, latencia P50/P95/P99, CPU, memoria, batería, concurrencia y cobertura de protocolos.
