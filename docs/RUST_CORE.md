@@ -34,7 +34,7 @@ Pruebas añadidas: UDP no DNS por IPv4 e IPv6, checksum IPv4 opcional, checksum 
 
 ## Prueba de socket UDP sobre smoltcp (etapa de laboratorio)
 
-Se incorpora `rust-core/tests/smoltcp_udp_device.rs` como prueba de integración host-side. Construye una interfaz smoltcp con una dirección IPv4 de laboratorio, enlaza un socket UDP, genera un datagrama hacia el puerto 443 y comprueba que el paquete emitido por la cola TX acotada pasa la validación UDP independiente (direcciones, puertos, payload y checksum).
+Se incorpora `rust-core/tests/smoltcp_udp_device.rs` como prueba de integración host-side. Construye una interfaz smoltcp con una dirección IPv4 de laboratorio, enlaza un socket UDP, genera un datagrama hacia el puerto 443 y comprueba que el paquete emitido por la cola TX acotada pasa la validación UDP independiente (direcciones, puertos, payload y checksum). La prueba utiliza la API `PacketBuffer` de smoltcp 0.11.
 
 Esta prueba valida únicamente el tramo **socket UDP smoltcp → interfaz IP → cola TX virtual**. No representa una conexión a Internet ni una retransmisión por socket Android protegido. No valida recepción desde la red, timeouts, fragmentación, IPv6 end-to-end, control de flujo, protección contra bucles, ni integración con el TUN real. Por tanto, el adaptador no se activa en producción y DNS permanece sin cambios.
 
