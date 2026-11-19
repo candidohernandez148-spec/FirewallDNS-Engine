@@ -31,9 +31,10 @@ Los nombres son límites lógicos iniciales; se convertirán en módulos Gradle 
 1. El adaptador recibe una consulta DNS o metadatos de flujo.
 2. Normaliza la entrada e identifica la aplicación si es posible.
 3. Consulta la caché.
-4. Si no hay resultado vigente, Policy Engine evalúa reglas y señales.
-5. Devuelve decisión, motivo, regla, confianza y caducidad.
-6. Publica evento al monitor de forma asíncrona y acotada.
+4. Si no hay resultado vigente, Policy Engine evalúa reglas explícitas.
+5. Solo cuando no existe regla coincidente, Threat Engine evalúa indicadores locales y heurísticas.
+6. Devuelve decisión, motivo, regla, confianza y caducidad.
+7. Publica evento al monitor de forma asíncrona y acotada.
 
 OBSERVE registra señales y permite el tráfico; no equivale a bloquear.
 
@@ -47,7 +48,23 @@ OBSERVE registra señales y permite el tráfico; no equivale a bloquear.
 ## Estrategia de transporte
 Definir interfaces y medir alternativas. Se prefiere integrar un stack probado antes que implementar TCP/IP desde cero. Ningún stack existente se elimina ni sustituye en FirewallDNS hasta que un candidato independiente pase pruebas de compatibilidad, seguridad y rendimiento.
 
-## Concurrencia y persistencia
+## Estado del prototipo de inteligencia local
+
+El módulo `threat-engine` incorpora una lista pequeña de indicadores publicitarios y de tracking. Los indicadores de publicidad de alta confianza pueden sugerir BLOCK; los endpoints de tracking seleccionados sugieren OBSERVE. Las heurísticas por etiquetas DNS (por ejemplo, términos de anuncios o tracking) solo sugieren OBSERVE. Una allowlist evita que estas heurísticas afecten dominios esenciales conocidos. Las reglas explícitas del usuario se evalúan antes y prevalecen. No hay todavía feed firmado ni cobertura exhaustiva de malware/phishing.
+
+## Estado del monitor local
+
+El módulo `engine-monitor` mantiene contadores con acumuladores concurrentes y una cola lock-free acotada para eventos locales. Publicar eventos no realiza I/O y no espera a un consumidor; al llenarse la cola, descarta el evento y aumenta un contador. Los dominios y paquetes se redactan por defecto y solo se incluyen mediante opt-in local. El consumidor puede extraer eventos mediante polling o lotes; no se crea un hilo de UI ni de almacenamiento dentro del motor.
+
+## Estado del prototipo DNS
+
+El módulo `dns-engine` contiene un parser de consultas DNS de una pregunta, con validación de cabecera y QNAME, una sección adicional opcional EDNS(0) OPT, evaluación contra `engine-core` y síntesis NXDOMAIN. La respuesta local conserva ID, pregunta, RD/CD, tamaño UDP anunciado y el bit DNSSEC OK; no copia las opciones EDNS del cliente.
+
+El codec DNS-over-TCP solo maneja el prefijo de longitud de dos bytes y mensajes completos/parciales en buffers. No abre sockets ni implementa reensamblado de flujos. Todavía falta transporte UDP/TCP, reenvío upstream, timeouts, caché TTL y pruebas contra resolvers reales.
+
+Las clases DNS distintas de IN se pasan sin aplicar políticas de dominio. Los tipos A/AAAA y otros tipos IN se evalúan por nombre; el módulo no interpreta RDATA ni genera respuestas A/AAAA permitidas.
+
+## Caché de decisiones DNS\n\nLa caché de decisiones está acotada por número de entradas, usa TTL corto y la revisión monotónica del snapshot de políticas como parte de la clave. La caducidad de una regla limita también la vida de su decisión cacheada. Las lecturas son concurrentes y sin bloqueo; las escrituras usan un bloqueo breve únicamente para mantener el límite estricto. Esta caché no almacena respuestas DNS ni sustituye la futura caché positiva/negativa de respuestas.\n\n## Concurrencia y persistencia
 - Evaluación síncrona, acotada y sin disco en la ruta crítica.
 - Room/SQLite fuera de la ruta crítica; WAL se evaluará con mediciones.
 - Reglas activas como snapshots inmutables.

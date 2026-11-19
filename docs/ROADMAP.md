@@ -1,45 +1,57 @@
 # Hoja de ruta
 
 ## Fase 0 — Fundamentos y contratos
-- Definir contratos de decisión, identidad, eventos y ciclo de vida.
-- Documentar política de errores y privacidad.
-- Elegir stack y estructura Gradle tras una prueba técnica pequeña.
-- Salida: arquitectura revisada y decisiones registradas.
+- [x] Documentación de arquitectura, seguridad, pruebas y límites.
+- [x] Contratos puros de decisión y reglas.
+- [x] Build Kotlin/JVM separado de Android.
+- [ ] CI verde y pruebas reproducibles en cada cambio.
 
 ## Fase 1 — Núcleo de políticas
-- Modelos BLOCK/OBSERVE/ALLOW.
-- Precedencia explícita de reglas de usuario, reglas administradas, allowlist esencial y señales heurísticas.
-- Evaluación determinista, explicable y con motivo.
-- Pruebas unitarias y de concurrencia.
-- Salida: motor puro, sin dependencias Android ni I/O en ruta crítica.
+- [x] Modelos BLOCK/OBSERVE/ALLOW.
+- [x] Precedencia y prioridades explícitas.
+- [x] Evaluación determinista, explicable y con motivo.
+- [x] Normalización IDN y etiquetas DNS de servicio.
+- [x] Reglas por aplicación, caducidad y activación.
+- [x] Reemplazo atómico de reglas con revisión monotónica.
+- [ ] Pruebas de concurrencia y benchmark de latencia.
 
 ## Fase 2 — DNS y caché
-- Normalización segura de nombres DNS (IDN, minúsculas, punto final y validación).
-- Evaluación A/AAAA y otros tipos según semántica del registro.
-- Caché positiva/negativa con TTL, límites e invalidación.
-- Pruebas UDP/TCP, respuestas malformadas, NXDOMAIN y latencia.
+- [x] Parser de consultas de una pregunta y validación de cabecera/QNAME/QTYPE/QCLASS.
+- [x] Validación EDNS(0), TLV y límites.
+- [x] NXDOMAIN sintético con preservación segura de EDNS.
+- [x] Codec de framing DNS-over-TCP.
+- [x] Caché de decisiones acotada, con TTL y aislamiento por revisión de reglas.
+- [ ] Fuzzing y suite ampliada de mensajes malformados.
+- [ ] Transporte DNS UDP/TCP y reenvío upstream.
+- [ ] Timeouts, cancelación y manejo de errores de upstream.
+- [ ] Caché de respuestas DNS positiva/negativa con TTL (separada de la caché de decisiones).
+- [ ] Medición DNS P50/P95/P99.
 
-## Fase 3 — Identidad de aplicación y conexiones
-- Resolver UID/paquete con APIs compatibles.
+## Fase 3 — Inteligencia local inicial
+- [x] Indicadores curados iniciales para redes publicitarias y endpoints de tracking.
+- [x] Allowlist inicial de dominios esenciales.
+- [x] Heurísticas léxicas conservadoras que solo generan OBSERVE.
+- [x] Reglas explícitas del usuario prevalecen; indicadores aprendidos no bloquean directamente.
+- [ ] Feed verificable y actualizable de malware/phishing, con firma y caducidad.
+- [ ] Aprendizaje local persistente con límites, revisión y corrección.
+- [ ] Medición de falsos positivos en aplicaciones reales.
+
+## Fase 4 — Identidad de aplicación y conexiones
+- Resolver UID/paquete con APIs Android compatibles.
 - Políticas por aplicación con degradación explícita si falta identidad.
 - Metadatos TCP/UDP sin fingir inspección de contenido cifrado.
 
-## Fase 4 — Adaptador VPN y transporte
+## Fase 5 — Adaptador VPN y transporte
 - Prototipo aislado con VpnService/TUN.
 - Evaluar stack probado frente a alternativas nativas.
 - Validar IPv4/IPv6, MTU, fragmentación, ICMP, TCP/UDP, DNS TCP, checksums y reconexiones.
 - Validar protect(), ausencia de bucles y DNS leaks.
 
-## Fase 5 — Inteligencia local
-- Señales explicables para malware, phishing, anuncios y trackers.
-- Aprendizaje local con límites, caducidad y corrección.
-- No bloquear por una sola señal débil; probar allowlist esencial.
-- Medir falsos positivos.
-
 ## Fase 6 — Observabilidad y rendimiento
-- Métricas P50/P95, throughput, CPU, RAM, batería, pérdidas y caché.
-- Eventos oportunos mediante flujo acotado y no bloqueante.
-- Pruebas prolongadas y de reconexión.
+- [x] Contadores locales de decisiones, caché, rechazos y eventos descartados.
+- [x] Cola de eventos acotada con publicación no bloqueante y datos sensibles redactados por defecto.
+- [ ] Métricas P50/P95, throughput, CPU, RAM, batería y pérdidas.
+- [ ] Pruebas prolongadas, concurrencia y reconexión.
 
 ## Fase 7 — Integración controlada
 - Adaptador con FirewallDNS sin duplicar VpnService.
