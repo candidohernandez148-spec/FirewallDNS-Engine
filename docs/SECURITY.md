@@ -2,7 +2,7 @@
 
 ## Datos
 - Procesamiento y aprendizaje locales por defecto.
-- No enviar dominios, UID, paquetes ni historial a servicios externos por defecto.
+- No enviar dominios, UID, paquetes ni historial a servicios externos por defecto.\n- El monitor local redacta dominios y paquetes por defecto; capturarlos requiere opt-in explícito del consumidor.
 - Redactar logs y limitar retención.
 - Telemetría opt-in y documentada si se incorpora.
 
