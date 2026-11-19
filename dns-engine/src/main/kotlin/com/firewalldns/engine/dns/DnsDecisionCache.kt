@@ -57,20 +57,21 @@ class DnsDecisionCache(
                 continue
             }
 
-            // Opportunistically reclaim expired entries without blocking readers.
-            entries.entries.forEach { (entryKey, entry) ->
-                if (entry.expiresAtEpochMillis <= nowEpochMillis &&
-                    entries.remove(entryKey, entry)
-                ) {
-                    entryCount.decrementAndGet()
-                }
-            }
-
             if (entryCount.get() >= maxEntries) {
-                val victim = entries.entries.firstOrNull()
-                if (victim == null) return
-                if (entries.remove(victim.key, victim.value)) entryCount.decrementAndGet()
-                continue
+                // Reclaim expired entries only under capacity pressure; normal
+                // cache misses must not scan the entire map on the DNS hot path.
+                entries.entries.forEach { (entryKey, entry) ->
+                    if (entry.expiresAtEpochMillis <= nowEpochMillis &&
+                        entries.remove(entryKey, entry)
+                    ) {
+                        entryCount.decrementAndGet()
+                    }
+                }
+                if (entryCount.get() >= maxEntries) {
+                    val victim = entries.entries.firstOrNull() ?: return
+                    if (entries.remove(victim.key, victim.value)) entryCount.decrementAndGet()
+                    continue
+                }
             }
 
             val reserved = entryCount.get()
