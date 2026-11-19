@@ -187,7 +187,6 @@ internal object FailoverDnsBenchmark {
     }
     private fun json(value: String): String =
         "\"" + value.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n") + "\""
-        "\"" + value.replace("\\\\", "\\\\\\\\").replace("\"", "\\\\"").replace("\n", "\n") + "\""
 
     private object NoopSocketProtector : DnsSocketProtector {
         override fun protect(socket: DatagramSocket): Boolean = true
