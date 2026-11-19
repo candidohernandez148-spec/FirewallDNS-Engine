@@ -65,6 +65,19 @@ class DnsResponseCacheTest {
         assertNull(cache.get("1.1.1.1:53", changed, 0))
     }
 
+    @Test fun refusesResponsesWithForwardCompressionPointers() {
+        val cache = DnsResponseCache()
+        val request = query("example.com")
+        val malformed = positiveResponse(request, 60).also {
+            val answerOffset = request.size
+            // A forward pointer into the RR TYPE field is invalid DNS compression.
+            it[answerOffset] = 0xc0.toByte()
+            it[answerOffset + 1] = (answerOffset + 2).toByte()
+        }
+        assertFalse(cache.put("upstream", request, malformed, 0))
+        assertEquals(0, cache.size)
+    }
+
     @Test fun refusesEntriesLargerThanConfiguredByteBudget() {
         val cache = DnsResponseCache(maxBytes = 1)
         val request = query("large.example")
