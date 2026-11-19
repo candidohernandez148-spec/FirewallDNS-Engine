@@ -94,6 +94,7 @@ class PolicyEngineTest {
     @Test fun normalizesCaseTrailingDotAndIdn() {
         assertEquals("example.com", DomainNormalizer.normalize("EXAMPLE.COM."))
         assertEquals("xn--bcher-kva.example", DomainNormalizer.normalize("bücher.example"))
+        assertEquals("_sip._tcp.example.com", DomainNormalizer.normalize("_SIP._TCP.EXAMPLE.COM."))
     }
 
     private fun rule(
