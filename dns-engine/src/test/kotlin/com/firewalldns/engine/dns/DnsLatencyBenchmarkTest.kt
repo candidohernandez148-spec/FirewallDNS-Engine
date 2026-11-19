@@ -81,10 +81,11 @@ class DnsLatencyBenchmarkTest {
             val upstreamStats = LatencyPercentiles.of(upstreamSamples)
             println("DNS_BENCHMARK scenario=uncached_loopback_udp samples=$sampleCount warmup=$warmup unit=us p50=${upstreamStats.p50Micros} p95=${upstreamStats.p95Micros} p99=${upstreamStats.p99Micros}")
 
-            val cacheQuery = query("cache.bench.example", 0x1234)
-            // Prime once outside the timed cache-hit section.
+            val cacheQuery = query("sample${sampleCount - 1}.bench.example", 0x1234)
+            // Reuse the final upstream sample with a different transaction ID;
+            // the response cache deliberately excludes the ID from its key.
             val prime = assertIs<DnsUpstreamResult.Success>(client.exchange(cacheQuery))
-            assertEquals(DnsUpstreamTransport.UDP, prime.response.transport)
+            assertEquals(DnsUpstreamTransport.CACHE, prime.response.transport)
             val cacheSamples = ArrayList<Long>(sampleCount)
             repeat(sampleCount) { index ->
                 val request = query("cache.bench.example", (index + 1) and 0xffff)
