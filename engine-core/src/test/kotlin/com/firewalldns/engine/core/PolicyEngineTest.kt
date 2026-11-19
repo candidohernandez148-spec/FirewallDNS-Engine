@@ -97,6 +97,21 @@ class PolicyEngineTest {
         assertEquals("_sip._tcp.example.com", DomainNormalizer.normalize("_SIP._TCP.EXAMPLE.COM."))
     }
 
+    @Test fun policyRevisionAdvancesOnlyAfterValidReplacement() {
+        val engine = PolicyEngine(listOf(rule("first", "example.com", PolicyAction.BLOCK)))
+        val initialRevision = engine.revision
+        assertEquals(initialRevision, engine.evaluate(PolicyRequest("example.com"), 1).policyRevision)
+
+        assertFailsWith<IllegalArgumentException> {
+            engine.replaceRules(listOf(rule("invalid", "not a valid domain", PolicyAction.BLOCK)))
+        }
+        assertEquals(initialRevision, engine.revision)
+
+        engine.replaceRules(listOf(rule("second", "example.com", PolicyAction.ALLOW)))
+        assertEquals(initialRevision + 1, engine.revision)
+        assertEquals(initialRevision + 1, engine.evaluate(PolicyRequest("example.com"), 1).policyRevision)
+    }
+
     private fun rule(
         id: String, domain: String, action: PolicyAction,
         exact: Boolean = false, appPackage: String? = null,
