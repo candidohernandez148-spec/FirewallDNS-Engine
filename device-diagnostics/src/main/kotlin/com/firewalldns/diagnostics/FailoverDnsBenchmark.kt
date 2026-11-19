@@ -152,13 +152,13 @@ internal object FailoverDnsBenchmark {
                 }
             """.trimIndent()
             val summary = buildString {
-                append("Prueba de failover del motor completada\\n")
-                append("Red: $networkType; validada por Android: $validated\\n")
-                append("Cada intento fuerza timeout del primario local en ${primaryTimeoutMs} ms y luego prueba el DNS público secundario.\\n")
+                append("Prueba de failover del motor completada\n")
+                append("Red: $networkType; validada por Android: $validated\n")
+                append("Cada intento fuerza timeout del primario local en ${primaryTimeoutMs} ms y luego prueba el DNS público secundario.\n")
                 results.forEach {
                     append("Secundario ${it.secondary}: ${it.successes}/$samples recuperaciones correctas, ${it.failures} fallidas")
                     if (it.p50Us != null) append(" — latencia total P50 ${it.p50Us} µs, P95 ${it.p95Us} µs, P99 ${it.p99Us} µs")
-                    append("\\n")
+                    append("\n")
                 }
                 append("Alcance: valida failover real del motor hacia UDP/53, pero no VPN activa, TUN ni VpnService.protect().")
             }
@@ -186,8 +186,8 @@ internal object FailoverDnsBenchmark {
         }
     }
 
-    private fun json(value: String): String =
-        "\"" + value.replace("\\\\", "\\\\\\\\").replace("\"", "\\\\"").replace("\\n", "\\n") + "\""
+        "\"" + value.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n") + "\""
+        "\"" + value.replace("\\\\", "\\\\\\\\").replace("\"", "\\\\"").replace("\n", "\n") + "\""
 
     private object NoopSocketProtector : DnsSocketProtector {
         override fun protect(socket: DatagramSocket): Boolean = true
