@@ -44,8 +44,8 @@ fn smoltcp_udp_socket_emits_valid_packet_through_bounded_tun_device() {
         .dequeue_tx()
         .expect("smoltcp should emit one packet into the TUN TX queue");
     let datagram = parse_udp_packet(&packet).expect("emitted packet must be valid UDP");
-    assert_eq!(datagram.source, "10.77.0.2".parse().unwrap());
-    assert_eq!(datagram.destination, "10.77.0.3".parse().unwrap());
+    assert_eq!(datagram.source, "10.77.0.2".parse::<std::net::IpAddr>().unwrap());
+    assert_eq!(datagram.destination, "10.77.0.3".parse::<std::net::IpAddr>().unwrap());
     assert_eq!(datagram.source_port, 53000);
     assert_eq!(datagram.destination_port, 443);
     assert_eq!(datagram.payload, b"firewalldns-udp-probe");
