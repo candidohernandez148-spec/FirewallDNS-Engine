@@ -6,6 +6,7 @@ import com.firewalldns.engine.core.PolicyDecision
 import com.firewalldns.engine.core.PolicyEngine
 import com.firewalldns.engine.core.PolicyRequest
 import com.firewalldns.engine.threat.ThreatAnalyzer
+import com.firewalldns.engine.monitor.EngineMonitor
 
 sealed interface DnsEvaluation {
     data class Forward(val question: DnsQuestion, val decision: PolicyDecision) : DnsEvaluation
@@ -18,19 +19,30 @@ class DnsPolicyAdapter(
     private val policyEngine: PolicyEngine,
     private val decisionCache: DnsDecisionCache = DnsDecisionCache(),
     private val threatAnalyzer: ThreatAnalyzer = ThreatAnalyzer(),
+    private val monitor: EngineMonitor = EngineMonitor(),
 ) {
     fun evaluate(packet: ByteArray, appPackage: String? = null, nowEpochMillis: Long = System.currentTimeMillis()): DnsEvaluation {
         val question = when (val parsed = DnsMessageParser.parse(packet)) {
             is DnsParseResult.Valid -> parsed.question
-            is DnsParseResult.Invalid -> return DnsEvaluation.Rejected(parsed.reason)
+            is DnsParseResult.Invalid -> {
+                monitor.recordRejected(parsed.reason, nowEpochMillis)
+                return DnsEvaluation.Rejected(parsed.reason)
+            }
         }
         if (question.dnsClass != 1) {
-            return DnsEvaluation.Forward(question, PolicyDecision(PolicyAction.ALLOW, "dns_class_not_filtered"))
+            val decision = PolicyDecision(PolicyAction.ALLOW, "dns_class_not_filtered")
+            monitor.recordDecision(question.domain, appPackage, decision, nowEpochMillis)
+            return DnsEvaluation.Forward(question, decision)
         }
         val normalizedDomain = DomainNormalizer.normalize(question.domain)
-            ?: return DnsEvaluation.Rejected("dns_qname_invalid_hostname")
+            ?: run {
+                monitor.recordRejected("dns_qname_invalid_hostname", nowEpochMillis)
+                return DnsEvaluation.Rejected("dns_qname_invalid_hostname")
+            }
         val cacheKey = DnsDecisionCacheKey(normalizedDomain, appPackage, policyEngine.revision)
-        val decision = decisionCache.get(cacheKey, nowEpochMillis) ?: run {
+        val cachedDecision = decisionCache.get(cacheKey, nowEpochMillis)
+        if (cachedDecision != null) monitor.recordCacheHit() else monitor.recordCacheMiss()
+        val decision = cachedDecision ?: run {
             val policyDecision = policyEngine.evaluate(
                 PolicyRequest(normalizedDomain, appPackage),
                 nowEpochMillis,
@@ -53,6 +65,7 @@ class DnsPolicyAdapter(
             )
             effectiveDecision
         }
+        monitor.recordDecision(normalizedDomain, appPackage, decision, nowEpochMillis)
         return when (decision.action) {
             PolicyAction.BLOCK -> DnsEvaluation.Blocked(question, decision, nxdomainResponse(question))
             PolicyAction.OBSERVE, PolicyAction.ALLOW -> DnsEvaluation.Forward(question, decision)
