@@ -52,7 +52,7 @@ class PublicDnsActivity : Activity() {
             val observed = intent.getLongExtra("observed", 0)
             val allowed = intent.getLongExtra("allowed", 0)
             val rejected = intent.getLongExtra("rejected", 0)
-            status.text = "Motor propio en TUN: $state\\nPaquetes recibidos: $packets\\nDNS procesados: $processed\\nRespuestas enviadas: $sent\\nBLOCK: $blocked | OBSERVE: $observed | ALLOW: $allowed\\nRechazados: $rejected\\nDescartados: $dropped\\n\\nAl terminar, pulsa Detener. Solo se enruta al túnel el DNS dirigido a sus direcciones virtuales; no es un firewall de todo el tráfico."
+            status.text = "Motor propio en TUN: $state\nPaquetes recibidos: $packets\nDNS procesados: $processed\nRespuestas enviadas: $sent\nBLOCK: $blocked | OBSERVE: $observed | ALLOW: $allowed\nRechazados: $rejected\nDescartados: $dropped\n\nAl terminar, pulsa Detener. Solo se enruta al túnel el DNS dirigido a sus direcciones virtuales; no es un firewall de todo el tráfico."
         }
     }
 
@@ -110,9 +110,7 @@ class PublicDnsActivity : Activity() {
         stopEngineTunButton = Button(this).apply {
             text = "Detener motor TUN"
             setOnClickListener {
-                val stop = Intent(this@PublicDnsActivity, EngineTunVpnService::class.java)
-                    .setAction(EngineTunVpnService.ACTION_STOP)
-                if (Build.VERSION.SDK_INT >= 26) startForegroundService(stop) else startService(stop)
+                stopService(Intent(this@PublicDnsActivity, EngineTunVpnService::class.java))
             }
         }
         root.addView(engineTunButton)
