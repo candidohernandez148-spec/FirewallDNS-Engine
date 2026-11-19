@@ -62,6 +62,13 @@ Los umbrales numéricos se fijarán tras capturar línea base en hardware real; 
 - La salida `DNS_BENCHMARK` informa número de muestras, calentamientos y P50/P95/P99 en microsegundos. El cálculo usa nearest-rank; no aplica umbrales de rendimiento automáticos porque el host CI y la carga no son una línea base de dispositivo.
 - El escenario de políticas mide el evaluador JVM sin transporte; los otros dos caracterizan cliente upstream y caché. Ninguno mide latencia de Internet, `VpnService.protect()`, TUN, radio Wi-Fi/móvil ni rendimiento del Samsung A34 5G.
 
+## Diagnóstico Android de failover DNS
+
+- La pantalla de prueba de red incluye **Probar failover real del motor**. Cada muestra usa un resolutor primario local silencioso para provocar un timeout controlado y, a continuación, el cliente de failover del motor intenta un secundario público (Cloudflare o Google) por UDP/53.
+- Ejecutar 10 muestras por secundario. El informe JSON registra transporte detectado, recuperaciones correctas, fallos, errores y latencia total P50/P95/P99.
+- Repetir manualmente con Wi-Fi y con datos móviles. No cambia DNS del sistema ni recoge dominios personales.
+- Este diagnóstico ejercita el failover del motor en el dispositivo y la salida UDP/53 al secundario, pero usa un protector no-op: no mide VpnService.protect(), VPN activa, TUN ni demuestra ausencia de fugas/bucles. El primario es una falla simulada local, no un proveedor público defectuoso.
+
 ## Benchmark Android en dispositivo
 
 - `AndroidDnsLatencyBenchmarkTest` es una prueba de instrumentación del módulo `:android-adapter`. Ejecuta 30 calentamientos y 250 muestras por escenario en el runtime Android, con un responder DNS UDP local en loopback.
