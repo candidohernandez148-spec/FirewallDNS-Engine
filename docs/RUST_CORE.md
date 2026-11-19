@@ -32,6 +32,14 @@ Este cambio **no transporta ni reenvía tráfico**: no abre sockets, no llama a 
 
 Pruebas añadidas: UDP no DNS por IPv4 e IPv6, checksum IPv4 opcional, checksum IPv6 obligatorio, puertos y payload, fragmentación, cabeceras de extensión, longitudes incorrectas, checksum corrupto y protocolo no UDP.
 
+## Prueba de socket UDP sobre smoltcp (etapa de laboratorio)
+
+Se incorpora `rust-core/tests/smoltcp_udp_device.rs` como prueba de integración host-side. Construye una interfaz smoltcp con una dirección IPv4 de laboratorio, enlaza un socket UDP, genera un datagrama hacia el puerto 443 y comprueba que el paquete emitido por la cola TX acotada pasa la validación UDP independiente (direcciones, puertos, payload y checksum). La prueba utiliza la API `PacketBuffer` de smoltcp 0.11.
+
+Esta prueba valida únicamente el tramo **socket UDP smoltcp → interfaz IP → cola TX virtual**. No representa una conexión a Internet ni una retransmisión por socket Android protegido. No valida recepción desde la red, timeouts, fragmentación, IPv6 end-to-end, control de flujo, protección contra bucles, ni integración con el TUN real. Por tanto, el adaptador no se activa en producción y DNS permanece sin cambios.
+
+Siguiente puerta técnica: implementar y probar el adaptador Android de datagramas protegidos (`VpnService.protect()` antes de `connect()`), con ciclo de vida por flujo, límites de concurrencia/colas, cancelación y cierre determinista. Después se añadirán pruebas de ida y vuelta en dispositivo antes de enrutar UDP de aplicaciones por Rust.
+
 ## Validación
 
 - `cargo test --manifest-path rust-core/Cargo.toml`: pruebas deterministas del parser Rust.
