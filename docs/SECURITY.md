@@ -30,6 +30,7 @@
 - No almacenar contenido de paquetes si bastan metadatos.
 
 ## Revisión antes de integrar
+- Proteger los sockets UDP/TCP upstream con `VpnService.protect` antes de conectarlos y usar direcciones IP numéricas para evitar recursión DNS.
 - Revisar permisos Android y superficie de VpnService.
 - Revisar dependencias y licencias del stack elegido.
 - Ejecutar pruebas de fugas, recursión, concurrencia y agotamiento de recursos.
