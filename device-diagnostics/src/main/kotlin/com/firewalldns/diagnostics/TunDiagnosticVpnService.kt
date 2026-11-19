@@ -7,12 +7,14 @@ import android.content.Intent
 import android.net.VpnService
 import android.os.Build
 import android.os.ParcelFileDescriptor
+import org.json.JSONArray
 import org.json.JSONObject
 import java.io.FileInputStream
 import java.net.DatagramPacket
 import java.net.DatagramSocket
 import java.net.InetAddress
 import java.time.Instant
+import java.util.Collections
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicBoolean
@@ -67,6 +69,8 @@ class TunDiagnosticVpnService : VpnService() {
         val matchingPackets = AtomicInteger(0)
         val warmupSeen = AtomicInteger(0)
         val socketSendCompleted = AtomicBoolean(false)
+        val packetSamples = Collections.synchronizedList(mutableListOf<JSONObject>())
+        val rejectionCounts = ConcurrentHashMap<String, AtomicInteger>()
 
         reader = thread(name = "firewalldns-diagnostic-tun-reader") {
             try {
@@ -77,7 +81,26 @@ class TunDiagnosticVpnService : VpnService() {
                         if (length <= 0) continue
                         bytesRead.addAndGet(length)
                         packetsRead.incrementAndGet()
-                        val probe = Ipv4UdpProbeParser.parse(buffer, length) ?: continue
+                        val inspection = Ipv4UdpProbeParser.inspect(buffer, length)
+                        val probe = inspection.probe
+                        if (probe == null) {
+                            inspection.rejection?.let { reason ->
+                                rejectionCounts.computeIfAbsent(reason) { AtomicInteger(0) }.incrementAndGet()
+                            }
+                            if (packetSamples.size < MAX_PACKET_SAMPLES) {
+                                packetSamples.add(
+                                    JSONObject()
+                                        .put("length", inspection.packetLength)
+                                        .put("ip_version", inspection.ipVersion)
+                                        .put("protocol", inspection.protocol)
+                                        .put("destination_ipv4", inspection.destinationIpv4)
+                                        .put("destination_port", inspection.destinationPort)
+                                        .put("udp_length", inspection.udpLength)
+                                        .put("rejection", inspection.rejection),
+                                )
+                            }
+                            continue
+                        }
                         matchingPackets.incrementAndGet()
                         if (probe.sequence == WARMUP_SEQUENCE) {
                             warmupSeen.incrementAndGet()
@@ -128,6 +151,7 @@ class TunDiagnosticVpnService : VpnService() {
                             "El socket completó send(), pero el lector no identificó el paquete de sincronización",
                             bytesRead.get(), packetsRead.get(), matchingPackets.get(), warmupSeen.get(),
                             socketSendCompleted.get(), protectResult, protectElapsedUs,
+                            packetSamples.toList(), rejectionCounts.mapValues { it.value.get() },
                         )
                         return@thread
                     }
@@ -181,6 +205,7 @@ class TunDiagnosticVpnService : VpnService() {
                     failure.message ?: failure.javaClass.simpleName,
                     bytesRead.get(), packetsRead.get(), matchingPackets.get(), warmupSeen.get(),
                     socketSendCompleted.get(), null, null,
+                    packetSamples.toList(), rejectionCounts.mapValues { it.value.get() },
                 )
             } finally {
                 stopSelf()
@@ -253,6 +278,8 @@ class TunDiagnosticVpnService : VpnService() {
         socketSendCompleted: Boolean,
         protectResult: Boolean?,
         protectElapsedUs: Long?,
+        packetSamples: List<JSONObject>,
+        rejectionCounts: Map<String, Int>,
     ) {
         val report = JSONObject()
             .put("format", "firewalldns-tun-diagnostic-failure-v2")
@@ -264,6 +291,8 @@ class TunDiagnosticVpnService : VpnService() {
             .put("tun_packets_read", packetsRead)
             .put("matching_probe_packets", matchingPackets)
             .put("warmup_packets_seen", warmupSeen)
+            .put("packet_header_samples", JSONArray(packetSamples))
+            .put("parser_rejections", JSONObject(rejectionCounts))
             .put("personal_dns_queries_collected", false)
         protectResult?.let { report.put("protect_returned", it) }
         protectElapsedUs?.let { report.put("protect_elapsed_us", it) }
@@ -338,5 +367,6 @@ class TunDiagnosticVpnService : VpnService() {
         private const val PROBE_INTERVAL_MS = 8L
         private const val PROBE_TIMEOUT_MS = 8_000L
         private const val READER_READY_TIMEOUT_MS = 2_000L
+        private const val MAX_PACKET_SAMPLES = 8
     }
 }
