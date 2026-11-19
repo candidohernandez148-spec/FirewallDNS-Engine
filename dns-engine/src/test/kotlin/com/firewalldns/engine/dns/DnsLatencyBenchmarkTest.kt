@@ -23,7 +23,7 @@ class DnsLatencyBenchmarkTest {
     fun percentileCalculationUsesNearestRank() {
         val stats = LatencyPercentiles.of(listOf(1L, 2L, 3L, 4L, 100L))
         assertEquals(3L, stats.p50Nanos)
-        assertEquals(4L, stats.p95Nanos)
+        assertEquals(100L, stats.p95Nanos)
         assertEquals(100L, stats.p99Nanos)
     }
 
