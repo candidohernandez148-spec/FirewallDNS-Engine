@@ -20,6 +20,18 @@ class DnsPolicyAdapterTest {
         assertContentEquals(request.copyOfRange(12, request.size), result.response.copyOfRange(12, result.response.size))
     }
 
+    @Test fun policyReplacementCannotReuseStaleCachedDecision() {
+        val engine = PolicyEngine(listOf(rule("ads.example.com", PolicyAction.BLOCK)))
+        val adapter = DnsPolicyAdapter(engine, DnsDecisionCache())
+        assertIs<DnsEvaluation.Blocked>(adapter.evaluate(query("ads.example.com"), nowEpochMillis = 1))
+
+        engine.replaceRules(listOf(rule("ads.example.com", PolicyAction.ALLOW)))
+        val afterUpdate = assertIs<DnsEvaluation.Forward>(
+            adapter.evaluate(query("ads.example.com"), nowEpochMillis = 2),
+        )
+        assertEquals(PolicyAction.ALLOW, afterUpdate.decision.action)
+    }
+
     @Test fun observeForwardsAndDoesNotSynthesizeBlock() {
         val adapter = DnsPolicyAdapter(PolicyEngine(listOf(rule("watch.example.com", PolicyAction.OBSERVE))))
         val result = assertIs<DnsEvaluation.Forward>(adapter.evaluate(query("watch.example.com")))
