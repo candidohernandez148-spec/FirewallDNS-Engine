@@ -1,8 +1,8 @@
 # Instrucciones para agentes y colaboradores
 
 1. Lee README.md, docs/ARCHITECTURE.md, docs/SECURITY.md, docs/TESTING.md y docs/ROADMAP.md.
-2. Mantén este repositorio independiente de FirewallDNS hasta que exista una fase de integración aprobada.
-3. No retires Firestack ni reemplaces el transporte de la aplicación principal como parte del proyecto inicial.
+2. FirewallDNS-Engine es el único motor de decisiones y filtrado; FirewallDNS Android es el anfitrión de plataforma, UI y VpnService.
+3. Firestack se usa únicamente como referencia de comportamiento y compatibilidad. No debe convertirse en dependencia ni mantenerse como segundo motor en la arquitectura final; retirarlo de Android solo después de superar las puertas de validación documentadas.
 4. No implementes una pila TCP/IP completa desde cero sin decisión técnica documentada, pruebas comparativas y aprobación explícita.
 5. Mantén la ruta crítica sin I/O de disco, red ni operaciones bloqueantes.
 6. Toda decisión es explicable: BLOCK, OBSERVE o ALLOW, con motivo y procedencia.
