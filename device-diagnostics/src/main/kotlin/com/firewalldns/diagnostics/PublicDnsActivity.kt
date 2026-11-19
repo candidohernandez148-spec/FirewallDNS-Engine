@@ -15,6 +15,7 @@ class PublicDnsActivity : Activity() {
     private lateinit var status: TextView
     private lateinit var runButton: Button
     private lateinit var exportButton: Button
+    private lateinit var failoverButton: Button
     @Volatile private var report: String? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -47,6 +48,10 @@ class PublicDnsActivity : Activity() {
             isEnabled = false
             setOnClickListener { saveReport() }
         }
+        failoverButton = Button(this).apply {
+            text = "Probar failover real del motor"
+            setOnClickListener { runFailoverTest() }
+        }
         val localButton = Button(this).apply {
             text = "Abrir diagnóstico local del motor"
             setOnClickListener { startActivity(Intent(this@PublicDnsActivity, MainActivity::class.java)) }
@@ -54,6 +59,7 @@ class PublicDnsActivity : Activity() {
         root.addView(status, ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
         root.addView(runButton)
         root.addView(exportButton)
+        root.addView(failoverButton)
         root.addView(localButton)
         setContentView(ScrollView(this).apply { addView(root) })
     }
@@ -76,6 +82,32 @@ class PublicDnsActivity : Activity() {
                 runOnUiThread {
                     status.text = "No se pudo completar: ${failure.javaClass.simpleName}: ${failure.message ?: "sin detalle"}"
                     runButton.isEnabled = true
+                }
+            }
+        }
+    }
+
+    private fun runFailoverTest() {
+        runButton.isEnabled = false
+        failoverButton.isEnabled = false
+        exportButton.isEnabled = false
+        report = null
+        status.text = "Probando failover del motor…"
+        thread(name = "firewalldns-engine-failover-test") {
+            try {
+                val result = FailoverDnsBenchmark.execute(this)
+                report = result.first
+                runOnUiThread {
+                    status.text = result.second + "\\n\\nGuarda el JSON. Repite una vez en Wi-Fi y otra en datos móviles."
+                    runButton.isEnabled = true
+                    failoverButton.isEnabled = true
+                    exportButton.isEnabled = true
+                }
+            } catch (failure: Throwable) {
+                runOnUiThread {
+                    status.text = "Falló la prueba de failover: ${failure.javaClass.simpleName}: ${failure.message ?: "sin detalle"}"
+                    runButton.isEnabled = true
+                    failoverButton.isEnabled = true
                 }
             }
         }
