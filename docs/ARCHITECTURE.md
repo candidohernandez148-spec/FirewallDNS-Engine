@@ -34,7 +34,7 @@ Los nombres son límites lógicos iniciales; se convertirán en módulos Gradle 
 4. Si no hay resultado vigente, Policy Engine evalúa reglas explícitas.
 5. Solo cuando no existe regla coincidente, Threat Engine evalúa indicadores locales y heurísticas.
 6. Devuelve decisión, motivo, regla, confianza y caducidad.
-6. Publica evento al monitor de forma asíncrona y acotada.
+7. Publica evento al monitor de forma asíncrona y acotada.
 
 OBSERVE registra señales y permite el tráfico; no equivale a bloquear.
 
