@@ -13,7 +13,10 @@ sealed interface DnsEvaluation {
 }
 
 /** Connects validated DNS questions to the shared policy engine. */
-class DnsPolicyAdapter(private val policyEngine: PolicyEngine) {
+class DnsPolicyAdapter(
+    private val policyEngine: PolicyEngine,
+    private val decisionCache: DnsDecisionCache = DnsDecisionCache(),
+) {
     fun evaluate(packet: ByteArray, appPackage: String? = null, nowEpochMillis: Long = System.currentTimeMillis()): DnsEvaluation {
         val question = when (val parsed = DnsMessageParser.parse(packet)) {
             is DnsParseResult.Valid -> parsed.question
@@ -24,10 +27,17 @@ class DnsPolicyAdapter(private val policyEngine: PolicyEngine) {
         }
         val normalizedDomain = DomainNormalizer.normalize(question.domain)
             ?: return DnsEvaluation.Rejected("dns_qname_invalid_hostname")
-        val decision = policyEngine.evaluate(
+        val cacheKey = DnsDecisionCacheKey(normalizedDomain, appPackage, policyEngine.revision)
+        val decision = decisionCache.get(cacheKey, nowEpochMillis) ?: policyEngine.evaluate(
             PolicyRequest(normalizedDomain, appPackage),
             nowEpochMillis,
-        )
+        ).also { evaluated ->
+            decisionCache.put(
+                DnsDecisionCacheKey(normalizedDomain, appPackage, evaluated.policyRevision),
+                evaluated,
+                nowEpochMillis,
+            )
+        }
         return when (decision.action) {
             PolicyAction.BLOCK -> DnsEvaluation.Blocked(question, decision, nxdomainResponse(question))
             PolicyAction.OBSERVE, PolicyAction.ALLOW -> DnsEvaluation.Forward(question, decision)
