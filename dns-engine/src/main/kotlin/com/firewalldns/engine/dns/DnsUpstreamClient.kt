@@ -62,10 +62,6 @@ class DnsUpstreamClient(
             is DnsParseResult.Valid -> parsed.question
             is DnsParseResult.Invalid -> return DnsUpstreamResult.Failure(parsed.reason)
         }
-        if (question.dnsClass != 1) {
-            return DnsUpstreamResult.Failure("dns_upstream_query_class_unsupported")
-        }
-
         return when (val udp = exchangeUdp(query, question)) {
             is UdpAttempt.Failure -> DnsUpstreamResult.Failure(udp.reason)
             is UdpAttempt.Response -> if (udp.truncated) {
