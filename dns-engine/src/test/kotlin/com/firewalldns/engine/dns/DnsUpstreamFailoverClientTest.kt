@@ -3,9 +3,12 @@ package com.firewalldns.engine.dns
 import java.net.DatagramPacket
 import java.net.DatagramSocket
 import java.net.InetAddress
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import kotlin.concurrent.thread
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
@@ -23,18 +26,10 @@ class DnsUpstreamFailoverClientTest {
                         it[2] = 0x81.toByte()
                         it[3] = 0x80.toByte()
                     }
-                    healthyResolver.send(
-                        DatagramPacket(response, response.size, incoming.socketAddress),
-                    )
+                    healthyResolver.send(DatagramPacket(response, response.size, incoming.socketAddress))
                 }
-                val first = DnsUpstreamClient(
-                    DnsUpstreamConfig("127.0.0.1", silentResolver.localPort, timeoutMillis = 80),
-                    TestProtector,
-                )
-                val second = DnsUpstreamClient(
-                    DnsUpstreamConfig("127.0.0.1", healthyResolver.localPort, timeoutMillis = 500),
-                    TestProtector,
-                )
+                val first = client(silentResolver.localPort, 80)
+                val second = client(healthyResolver.localPort, 500)
 
                 val result = DnsUpstreamFailoverClient(listOf(first, second)).exchange(query)
                 responder.join(2_000)
@@ -51,18 +46,8 @@ class DnsUpstreamFailoverClientTest {
         DatagramSocket(0, InetAddress.getByName("127.0.0.1")).use { first ->
             DatagramSocket(0, InetAddress.getByName("127.0.0.1")).use { second ->
                 val result = DnsUpstreamFailoverClient(
-                    listOf(
-                        DnsUpstreamClient(
-                            DnsUpstreamConfig("127.0.0.1", first.localPort, timeoutMillis = 60),
-                            TestProtector,
-                        ),
-                        DnsUpstreamClient(
-                            DnsUpstreamConfig("127.0.0.1", second.localPort, timeoutMillis = 90),
-                            TestProtector,
-                        ),
-                    ),
+                    listOf(client(first.localPort, 60), client(second.localPort, 90)),
                 ).exchange(query())
-
                 assertEquals(
                     "dns_upstream_udp_timeout",
                     assertIs<DnsUpstreamResult.Failure>(result).reason,
@@ -72,15 +57,103 @@ class DnsUpstreamFailoverClientTest {
     }
 
     @Test
-    fun rejectsEmptyResolverList() {
-        kotlin.test.assertFailsWith<IllegalArgumentException> {
-            DnsUpstreamFailoverClient(emptyList())
+    fun stopsAfterConfiguredMaximumAttempts() {
+        DatagramSocket(0, InetAddress.getByName("127.0.0.1")).use { first ->
+            DatagramSocket(0, InetAddress.getByName("127.0.0.1")).use { second ->
+                DatagramSocket(0, InetAddress.getByName("127.0.0.1")).use { unused ->
+                    val result = DnsUpstreamFailoverClient(
+                        listOf(
+                            client(first.localPort, 50),
+                            client(second.localPort, 50),
+                            client(unused.localPort, 50),
+                        ),
+                        maxAttempts = 2,
+                    ).exchange(query())
+                    assertEquals(
+                        "dns_upstream_udp_timeout",
+                        assertIs<DnsUpstreamResult.Failure>(result).reason,
+                    )
+                }
+            }
         }
     }
 
+    @Test
+    fun doesNotRetryInvalidQuery() {
+        DatagramSocket(0, InetAddress.getByName("127.0.0.1")).use { first ->
+            DatagramSocket(0, InetAddress.getByName("127.0.0.1")).use { second ->
+                val result = DnsUpstreamFailoverClient(
+                    listOf(client(first.localPort, 50), client(second.localPort, 50)),
+                ).exchange(byteArrayOf(1, 2, 3))
+                assertEquals(
+                    "dns_header_truncated",
+                    assertIs<DnsUpstreamResult.Failure>(result).reason,
+                )
+            }
+        }
+    }
+
+    @Test
+    fun doesNotRetryWhenSocketProtectionFails() {
+        DatagramSocket(0, InetAddress.getByName("127.0.0.1")).use { first ->
+            DatagramSocket(0, InetAddress.getByName("127.0.0.1")).use { second ->
+                val secondReceived = CountDownLatch(1)
+                val responder = thread {
+                    runCatching {
+                        second.soTimeout = 150
+                        second.receive(DatagramPacket(ByteArray(512), 512))
+                        secondReceived.countDown()
+                    }
+                }
+                val refusesProtection = object : DnsSocketProtector {
+                    override fun protect(socket: DatagramSocket) = false
+                    override fun protect(socket: java.net.Socket) = false
+                }
+                val result = DnsUpstreamFailoverClient(
+                    listOf(
+                        DnsUpstreamClient(DnsUpstreamConfig("127.0.0.1", first.localPort), refusesProtection),
+                        client(second.localPort, 100),
+                    ),
+                ).exchange(query())
+                responder.join(1_000)
+                assertEquals(
+                    "dns_upstream_udp_socket_protection_failed",
+                    assertIs<DnsUpstreamResult.Failure>(result).reason,
+                )
+                assertTrue(!secondReceived.await(20, TimeUnit.MILLISECONDS), "Failover sent an unprotected secondary query")
+            }
+        }
+    }
+
+    @Test
+    fun cancellationIsTerminalAndDoesNotTryAnotherResolver() {
+        DatagramSocket(0, InetAddress.getByName("127.0.0.1")).use { first ->
+            DatagramSocket(0, InetAddress.getByName("127.0.0.1")).use { second ->
+                val cancellation = DnsExchangeCancellation().also { it.cancel() }
+                val result = DnsUpstreamFailoverClient(
+                    listOf(client(first.localPort, 50), client(second.localPort, 50)),
+                ).exchange(query(), cancellation)
+                assertEquals(DnsUpstreamResult.Cancelled, result)
+            }
+        }
+    }
+
+    @Test
+    fun rejectsEmptyResolverListAndInvalidAttemptCount() {
+        assertFailsWith<IllegalArgumentException> { DnsUpstreamFailoverClient(emptyList()) }
+        val only = listOf(client(53, 50))
+        assertFailsWith<IllegalArgumentException> { DnsUpstreamFailoverClient(only, 0) }
+        assertFailsWith<IllegalArgumentException> { DnsUpstreamFailoverClient(only, 2) }
+    }
+
+    private fun client(port: Int, timeout: Int) = DnsUpstreamClient(
+        DnsUpstreamConfig("127.0.0.1", port, timeoutMillis = timeout),
+        TestProtector,
+    )
+
     private object TestProtector : DnsSocketProtector {
-        override fun protect(socket: DatagramSocket): Boolean = true
-        override fun protect(socket: java.net.Socket): Boolean = true
+        override fun protect(socket: DatagramSocket) = true
+        override fun protect(socket: java.net.Socket) = true
     }
 
     private fun query(): ByteArray {
