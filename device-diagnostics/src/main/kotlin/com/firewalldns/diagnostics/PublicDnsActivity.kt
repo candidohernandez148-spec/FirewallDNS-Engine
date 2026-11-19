@@ -66,9 +66,11 @@ class PublicDnsActivity : Activity() {
 
     private fun runTest() {
         runButton.isEnabled = false
+        failoverButton.isEnabled = false
         exportButton.isEnabled = false
         report = null
         status.text = "Consultando resolutores públicos…"
+
         thread(name = "firewalldns-public-dns-test") {
             try {
                 val result = PublicDnsBenchmark.execute(this)
@@ -76,12 +78,14 @@ class PublicDnsActivity : Activity() {
                 runOnUiThread {
                     status.text = result.second + "\n\nGuarda el JSON y envíamelo. Después cambia de Wi-Fi a datos móviles (o al revés) y repite."
                     runButton.isEnabled = true
+                    failoverButton.isEnabled = true
                     exportButton.isEnabled = true
                 }
             } catch (failure: Throwable) {
                 runOnUiThread {
                     status.text = "No se pudo completar: ${failure.javaClass.simpleName}: ${failure.message ?: "sin detalle"}"
                     runButton.isEnabled = true
+                    failoverButton.isEnabled = true
                 }
             }
         }
