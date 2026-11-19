@@ -6,7 +6,7 @@ package com.firewalldns.diagnostics
  */
 internal object Ipv4UdpProbeParser {
     const val MAGIC: Int = 0x46444e53 // "FDNS"
-    const val DESTINATION_IPV4: Int = 0xC6120001 // 198.18.0.1
+    const val DESTINATION_IPV4: Int = 0xC6120001.toInt() // 198.18.0.1
     const val DESTINATION_PORT: Int = 4242
 
     data class Probe(val sequence: Int)
