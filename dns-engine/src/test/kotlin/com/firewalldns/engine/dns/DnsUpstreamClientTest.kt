@@ -56,6 +56,30 @@ class DnsUpstreamClientTest {
         }
     }
 
+
+    @Test fun forwardsNonInternetDnsClassWithoutApplyingDomainPolicy() {
+        DatagramSocket(0, InetAddress.getByName("127.0.0.1")).use { server ->
+            server.soTimeout = 2_000
+            val query = query("version.bind", dnsClass = 3)
+            val responder = thread {
+                val incoming = DatagramPacket(ByteArray(512), 512)
+                server.receive(incoming)
+                val response = responseFor(query)
+                server.send(DatagramPacket(response, response.size, incoming.socketAddress))
+            }
+
+            val result = DnsUpstreamClient(
+                DnsUpstreamConfig("127.0.0.1", server.localPort, timeoutMillis = 2_000),
+            ).exchange(query)
+
+            responder.join(2_000)
+            assertEquals(
+                DnsUpstreamTransport.UDP,
+                assertIs<DnsUpstreamResult.Success>(result).response.transport,
+            )
+        }
+    }
+
     @Test fun refusesUnprotectedSocketBeforeSending() {
         DatagramSocket(0, InetAddress.getByName("127.0.0.1")).use { server ->
             val query = query("example.com")
@@ -120,11 +144,11 @@ class DnsUpstreamClientTest {
         assertEquals("dns_header_truncated", assertIs<DnsUpstreamResult.Failure>(result).reason)
     }
 
-    private fun query(domain: String): ByteArray {
+    private fun query(domain: String, dnsClass: Int = 1): ByteArray {
         val name = domain.split('.').flatMap { label ->
             listOf(label.length.toByte()) + label.toByteArray(Charsets.US_ASCII).toList()
         } + 0.toByte()
-        val question = name.toByteArray() + byteArrayOf(0, 1, 0, 1)
+        val question = name.toByteArray() + byteArrayOf(0, 1, (dnsClass ushr 8).toByte(), dnsClass.toByte())
         return ByteArray(12 + question.size).also {
             it[0] = 0x12
             it[1] = 0x34
