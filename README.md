@@ -10,6 +10,7 @@ Motor único e independiente de filtrado y protección de red para Android. [Fir
 - `threat-engine`: indicadores curados e integrados de publicidad y tracking, allowlist de dominios esenciales y heurísticas conservadoras; no aprende ni persiste conocimiento.
 - `engine-monitor`: métricas locales y cola de eventos acotada, sin I/O en la ruta crítica y con dominios/paquetes redactados por defecto.
 - `engine-runtime`: fachada pública única que coordina políticas, DNS, amenazas y monitorización para el adaptador Android.
+- `android-adapter`: biblioteca Android aislada que conecta la protección de sockets UDP/TCP con `VpnService.protect()`; aún no está integrada en el servicio VPN de FirewallDNS.
 
 El parser DNS acepta consultas de una pregunta y, opcionalmente, un único registro EDNS(0) OPT. El cliente upstream ya realiza intercambios UDP y fallback DNS-over-TCP, pero debe invocarse fuera de la ruta crítica y exige una estrategia explícita de protección de sockets; el adaptador Android debe conectarla con `VpnService.protect`. La caché de respuestas DNS está integrada en el cliente upstream; no implementa todavía gestión de flujos, fragmentación ni integración TUN. La inteligencia de amenazas es una base local inicial, no un feed exhaustivo de malware/phishing ni una garantía de detección. Los tipos de registro se filtran por nombre de dominio, no se interpretan sus RDATA.
 
