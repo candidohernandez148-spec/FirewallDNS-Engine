@@ -79,7 +79,7 @@ class PublicDnsActivity : Activity() {
   "updated_at_elapsed_ms": $updatedAt
 }"""
             report = engineTunReport
-            status.text = "Motor propio en TUN: $state\nPaquetes recibidos: $packets\nDNS procesados: $processed\nRespuestas enviadas: $sent\nBLOCK: $blocked | OBSERVE: $observed | ALLOW: $allowed\nRechazados: $rejected\nDescartados: $dropped\nDuración: \${durationMs / 1000}s\n\nPulsa «Guardar informe JSON» para exportar estos datos. Se actualizan cada 0,5 segundos.\n\nSolo se enruta al túnel el DNS dirigido a sus direcciones virtuales; no es un firewall de todo el tráfico."
+            status.text = "Motor propio en TUN: $state\nPaquetes recibidos: $packets\nDNS procesados: $processed\nRespuestas enviadas: $sent\nBLOCK: $blocked | OBSERVE: $observed | ALLOW: $allowed\nRechazados: $rejected\nDescartados: $dropped\nDuración: ${durationMs / 1000}s\n\nPulsa «Guardar informe JSON» para exportar estos datos. Se actualizan cada 0,5 segundos.\n\nSolo se enruta al túnel el DNS dirigido a sus direcciones virtuales; no es un firewall de todo el tráfico."
             exportButton.isEnabled = true
             engineTunButton.isEnabled = state != "running" && state != "starting"
             stopEngineTunButton.isEnabled = state == "running" || state == "starting" || state == "stopping"
