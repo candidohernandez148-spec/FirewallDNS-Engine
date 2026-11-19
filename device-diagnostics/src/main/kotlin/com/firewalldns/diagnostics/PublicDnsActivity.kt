@@ -52,7 +52,9 @@ class PublicDnsActivity : Activity() {
             val observed = intent.getLongExtra("observed", 0)
             val allowed = intent.getLongExtra("allowed", 0)
             val rejected = intent.getLongExtra("rejected", 0)
-            status.text = "Motor propio en TUN: $state\nPaquetes recibidos: $packets\nDNS procesados: $processed\nRespuestas enviadas: $sent\nBLOCK: $blocked | OBSERVE: $observed | ALLOW: $allowed\nRechazados: $rejected\nDescartados: $dropped\n\nAl terminar, pulsa Detener. Solo se enruta al túnel el DNS dirigido a sus direcciones virtuales; no es un firewall de todo el tráfico."
+            status.text = "Motor propio en TUN: $state\nPaquetes recibidos: $packets\nDNS procesados: $processed\nRespuestas enviadas: $sent\nBLOCK: $blocked | OBSERVE: $observed | ALLOW: $allowed\nRechazados: $rejected\nDescartados: $dropped\nActualización automática cada 0,5 segundos.\n\nSolo se enruta al túnel el DNS dirigido a sus direcciones virtuales; no es un firewall de todo el tráfico."
+            engineTunButton.isEnabled = state != "running" && state != "starting"
+            stopEngineTunButton.isEnabled = state == "running" || state == "starting" || state == "stopping"
         }
     }
 
