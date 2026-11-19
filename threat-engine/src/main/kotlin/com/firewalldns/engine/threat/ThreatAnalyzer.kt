@@ -25,7 +25,8 @@ class ThreatAnalyzer(
             require(indicator.id.isNotBlank()) { "Threat indicator ID must not be blank" }
             require(indicator.reason.isNotBlank()) { "Threat indicator reason must not be blank" }
             require(indicator.confidence in 0..100) { "Threat confidence must be between 0 and 100" }
-            require(indicator.action != PolicyAction.BLOCK ||\n                (indicator.confidence >= MIN_TRUSTED_BLOCK_CONFIDENCE && indicator.source != RuleSource.LEARNED)) {
+            require(indicator.action != PolicyAction.BLOCK ||
+                (indicator.confidence >= MIN_TRUSTED_BLOCK_CONFIDENCE && indicator.source != RuleSource.LEARNED)) {
                 "Blocking indicators require high confidence"
             }
             CompiledIndicator(
