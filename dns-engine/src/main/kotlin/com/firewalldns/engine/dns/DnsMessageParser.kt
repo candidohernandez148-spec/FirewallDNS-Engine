@@ -10,7 +10,8 @@ data class DnsQuestion(
     val dnsClass: Int,
     /** Exact question bytes (QNAME, QTYPE, QCLASS), safe to copy into a reply. */
     val wireQuestion: ByteArray,
-    val wireOptRecord: ByteArray?,
+    val ednsUdpPayloadSize: Int?,
+    val ednsDnssecOk: Boolean,
 )
 
 sealed interface DnsParseResult {
@@ -38,6 +39,7 @@ object DnsMessageParser {
         if (flags and 0x8000 != 0) return invalid("dns_response_not_query")
         if ((flags ushr 11) and 0x0f != 0) return invalid("dns_opcode_unsupported")
         if (flags and 0x0200 != 0) return invalid("dns_truncated_query")
+        if (flags and 0x0040 != 0) return invalid("dns_reserved_flag_set")
         if (qdCount != 1) return invalid("dns_question_count_unsupported")
         if (anCount != 0 || nsCount != 0) return invalid("dns_query_sections_unsupported")
         if (arCount > 1) return invalid("dns_additional_count_unsupported")
@@ -68,19 +70,20 @@ object DnsMessageParser {
         val dnsClass = u16(packet, offset + 2)
         offset += 4
         val questionEnd = offset
-        var wireOptRecord: ByteArray? = null
+        var ednsUdpPayloadSize: Int? = null
+        var ednsDnssecOk = false
         if (arCount == 1) {
-            val optStart = offset
             if (offset + 11 > packet.size) return invalid("dns_opt_truncated")
             if ((packet[offset++].toInt() and 0xff) != 0) return invalid("dns_opt_owner_unsupported")
             if (u16(packet, offset) != TYPE_OPT) return invalid("dns_additional_record_unsupported")
             offset += 2
+            ednsUdpPayloadSize = u16(packet, offset)
             offset += 4
+            ednsDnssecOk = u16(packet, offset - 2) and 0x8000 != 0
             val rdLength = u16(packet, offset)
             offset += 2
             if (offset + rdLength != packet.size) return invalid("dns_opt_rdata_length_invalid")
             offset += rdLength
-            wireOptRecord = packet.copyOfRange(optStart, offset)
         }
         if (offset != packet.size) return invalid("dns_trailing_bytes")
 
@@ -92,7 +95,8 @@ object DnsMessageParser {
                 type = type,
                 dnsClass = dnsClass,
                 wireQuestion = packet.copyOfRange(questionStart, questionEnd),
-                wireOptRecord = wireOptRecord,
+                ednsUdpPayloadSize = ednsUdpPayloadSize,
+                ednsDnssecOk = ednsDnssecOk,
             ),
         )
     }
