@@ -64,7 +64,7 @@ sealed interface DnsUpstreamResult {
  */
 class DnsUpstreamClient(
     private val config: DnsUpstreamConfig,
-    private val socketProtector: DnsSocketProtector = NoOpDnsSocketProtector,
+    private val socketProtector: DnsSocketProtector,
 ) {
     private sealed interface UdpAttempt {
         data class Response(val bytes: ByteArray, val truncated: Boolean) : UdpAttempt
