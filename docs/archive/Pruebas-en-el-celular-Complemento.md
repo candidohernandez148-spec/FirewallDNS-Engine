@@ -498,6 +498,7 @@ Compartido
 Mostrar todo
 
 Es para samsung A34 5g
+
 Respuesta del Modo IA para Es para samsung A34 5g
 El Samsung Galaxy A34 5G cuenta con un procesador MediaTek Dimensity 1080 (arquitectura ARM64 / aarch64) y ejecuta Android con capa One UI. Esto define exactamente cómo debes compilar el código Rust y qué ajustes incluir en Android para evitar que One UI cierre tu servicio VPN en segundo plano.
 
@@ -996,6 +997,7 @@ fn create_protected_udp() -> std::io::Result<UdpSocket> {
     let socket = socket2::Socket::new(socket2::Domain::IPV4, socket2::Type::DGRAM, None)?;
     socket.set_nonblocking(true)?;
     socket.bind(&SocketAddrV4::new(Ipv4Addr::UNSPECIFIED, 0).into())?;
+
     if !protect_socket(socket.as_raw_fd()) {
         return Err(std::io::Error::new(
             std::io::ErrorKind::PermissionDenied,
@@ -1495,7 +1497,8 @@ android_logger::Config::default()
 
 if let Ok(jvm) = env.get_java_vm() {
 let _ = JVM.set(jvm);
-}if let Ok(global_ref) = env.new_global_ref(thiz) {
+}
+if let Ok(global_ref) = env.new_global_ref(thiz) {
 let _ = VPN_SERVICE.set(global_ref);
 }
 
@@ -1995,6 +1998,7 @@ pub extern "system" fn Java_com_tudominio_vpn_LocalVpnService_updateDnsBlocklist
     let Ok(len) = env.get_array_length(&domains_array) else {
         return;
     };
+
     let mut domains = Vec::with_capacity(len as usize);
     for i in 0..len {
         if let Ok(elem) = env.get_object_array_element(&domains_array, i) {
@@ -2493,7 +2497,8 @@ class LocalVpnService : VpnService() {
         activeInstance = this
     }
 
-    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {        if (intent?.action == "STOP_VPN") {
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (intent?.action == "STOP_VPN") {
             stopVpn()
             return START_NOT_STICKY
         }
@@ -2993,6 +2998,7 @@ class LocalVpnService : VpnService() {
         } catch (t: Throwable) {
             Log.e(TAG, "Excepción JNI al detener el motor Rust", t)
         }
+
         try {
             vpnInterface?.close()
         } catch (e: IOException) {
@@ -3492,6 +3498,7 @@ class DnsFirewallService : VpnService() {
                 // Cargar reglas reales sanitizadas desde el gestor de FirewallDNS
                 val validDomains = loadSanitizedBlocklist()
                 updateDnsBlocklist(validDomains)
+
                 val thread = Thread {
                     var startedOk = false
                     try {
@@ -3990,7 +3997,8 @@ xml
             android:exported="false">
             <intent-filter>
                 <action android:name="android.net.VpnService" />
-            </intent-filter>            <property
+            </intent-filter>
+            <property
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="local_dns_firewall_vpn_engine" />
         </service>
@@ -4489,6 +4497,7 @@ pub fn build_ipv4_udp_packet(
         &IpAddress::Ipv4(ip_repr.src_addr),
         &IpAddress::Ipv4(ip_repr.dst_addr),
         payload.len(),
+
         |udp_payload| udp_payload.copy_from_slice(payload),
         &smoltcp::phy::ChecksumCapabilities::default(),
     );
@@ -4989,6 +4998,7 @@ let (shutdown_tx, shutdown_rx) = watch::channel(false);
 if let Ok(mut guard) = shutdown_slot().lock() {
 *guard = Some(shutdown_tx);
 }
+
 reset_counters_internal();
 UPSTREAM_DNS_IPV4.store(upstream_dns_ipv4 as u32, Ordering::Release);
 CURRENT_SESSION_ID.store(sid, Ordering::SeqCst);
