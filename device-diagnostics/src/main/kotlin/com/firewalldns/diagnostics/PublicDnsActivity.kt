@@ -73,7 +73,7 @@ class PublicDnsActivity : Activity() {
             setPadding(0, 20, 0, 20)
         })
         status = TextView(this).apply {
-            text = "Listo. Se harán 30 mediciones por resolutor, con 3 calentamientos."
+            text = "Listo. Se harán 30 mediciones por resolutor, con 3 calentamientos.\n\nEl estado y los contadores del motor se actualizarán automáticamente mientras el TUN esté activo."
             textSize = 15f
             setPadding(0, 12, 0, 24)
         }
@@ -109,8 +109,13 @@ class PublicDnsActivity : Activity() {
         }
         stopEngineTunButton = Button(this).apply {
             text = "Detener motor TUN"
+            isEnabled = false
             setOnClickListener {
-                stopService(Intent(this@PublicDnsActivity, EngineTunVpnService::class.java))
+                isEnabled = false
+                status.text = "Deteniendo VPN del motor y cerrando el descriptor TUN…"
+                val stop = Intent(this@PublicDnsActivity, EngineTunVpnService::class.java)
+                    .setAction(EngineTunVpnService.ACTION_STOP)
+                startService(stop)
             }
         }
         root.addView(engineTunButton)
@@ -129,6 +134,8 @@ class PublicDnsActivity : Activity() {
             registerReceiver(tunResultReceiver, filter)
         }
         receiverRegistered = true
+        engineTunButton.isEnabled = true
+        stopEngineTunButton.isEnabled = false
         val engineFilter = IntentFilter(EngineTunVpnService.ACTION_STATUS)
         if (Build.VERSION.SDK_INT >= 33) {
             registerReceiver(engineTunReceiver, engineFilter, Context.RECEIVER_NOT_EXPORTED)
@@ -176,6 +183,8 @@ class PublicDnsActivity : Activity() {
     }
 
     private fun startEngineTunService() {
+        engineTunButton.isEnabled = false
+        stopEngineTunButton.isEnabled = true
         status.text = "Iniciando VPN DNS de diagnóstico con FirewallDNS-Engine. Desactiva antes cualquier otra VPN. No se modifica el DNS global del teléfono."
         val start = Intent(this, EngineTunVpnService::class.java)
             .setAction(EngineTunVpnService.ACTION_START)
@@ -258,6 +267,8 @@ class PublicDnsActivity : Activity() {
                 startEngineTunService()
             } else {
                 status.text = "Permiso VPN denegado. No se inició el TUN del motor."
+                engineTunButton.isEnabled = true
+                stopEngineTunButton.isEnabled = false
             }
             return
         }
