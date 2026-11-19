@@ -22,3 +22,5 @@ jobs:
         run: gradle test
       - name: Assemble Android adapter library
         run: gradle :android-adapter:assembleDebug
+      - name: Compile Android on-device benchmark tests
+        run: gradle :android-adapter:assembleDebugAndroidTest
