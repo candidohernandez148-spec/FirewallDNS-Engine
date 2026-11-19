@@ -10,7 +10,7 @@ Motor independiente de filtrado y protección de red para Android. Este reposito
 - `threat-engine`: indicadores locales iniciales de publicidad y tracking, allowlist de dominios esenciales y heurísticas conservadoras que solo generan OBSERVE.
 - `engine-monitor`: métricas locales y cola de eventos acotada, sin I/O en la ruta crítica y con dominios/paquetes redactados por defecto.
 
-El parser DNS acepta consultas de una pregunta y, opcionalmente, un único registro EDNS(0) OPT. El cliente upstream ya realiza intercambios UDP y fallback DNS-over-TCP, pero debe invocarse fuera de la ruta crítica y su adaptador Android debe conectar el hook de protección con `VpnService.protect`. Todavía no implementa gestión de flujos, fragmentación, integración TUN ni caché de respuestas DNS. La inteligencia de amenazas es una base local inicial, no un feed exhaustivo de malware/phishing ni una garantía de detección. Los tipos de registro se filtran por nombre de dominio, no se interpretan sus RDATA.
+El parser DNS acepta consultas de una pregunta y, opcionalmente, un único registro EDNS(0) OPT. El cliente upstream ya realiza intercambios UDP y fallback DNS-over-TCP, pero debe invocarse fuera de la ruta crítica y exige una estrategia explícita de protección de sockets; el adaptador Android debe conectarla con `VpnService.protect`. Todavía no implementa gestión de flujos, fragmentación, integración TUN ni caché de respuestas DNS. La inteligencia de amenazas es una base local inicial, no un feed exhaustivo de malware/phishing ni una garantía de detección. Los tipos de registro se filtran por nombre de dominio, no se interpretan sus RDATA.
 
 ## Decisiones y límites
 - Repositorio privado durante el desarrollo; no modifica FirewallDNS.
