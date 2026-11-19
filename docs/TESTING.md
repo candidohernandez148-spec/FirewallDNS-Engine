@@ -13,6 +13,12 @@
 - Threat Engine: falsos positivos, allowlist esencial, señales contradictorias y ausencia de aprendizaje persistente.
 - Monitor: orden de eventos, capacidad máxima, descartes contabilizados, redacción de datos sensibles, métricas concurrentes y UI no bloqueante.
 
+## Robustez DNS y fuzzing
+- `DnsMessageParserFuzzTest` incorpora casos malformados conocidos y pruebas deterministas con entradas aleatorias y mutaciones de consultas válidas.
+- La prueba determinista es un smoke-fuzzer reproducible; no sustituye fuzzing guiado por cobertura, sanitización ni campañas prolongadas.
+- Ejecutar la suite en CI y registrar semilla/iteración si aparece una regresión para que el caso pueda convertirse en fixture permanente.
+- Ampliar casos EDNS/TLV y framing TCP; cubrir tamaños límite y respuestas upstream malformadas antes de probar resolvers externos.
+
 ## Matriz mínima
 - Samsung Galaxy A34 5G como dispositivo de referencia.
 - Android mínimo soportado y versión Android reciente.
