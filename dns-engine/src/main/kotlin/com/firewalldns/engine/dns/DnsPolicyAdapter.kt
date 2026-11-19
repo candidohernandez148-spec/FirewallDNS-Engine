@@ -19,7 +19,7 @@ class DnsPolicyAdapter(
     private val policyEngine: PolicyEngine,
     private val decisionCache: DnsDecisionCache = DnsDecisionCache(),
     private val threatAnalyzer: ThreatAnalyzer = ThreatAnalyzer(),
-    private val monitor: EngineMonitor = EngineMonitor(),
+    val monitor: EngineMonitor = EngineMonitor(),
 ) {
     fun evaluate(packet: ByteArray, appPackage: String? = null, nowEpochMillis: Long = System.currentTimeMillis()): DnsEvaluation {
         val question = when (val parsed = DnsMessageParser.parse(packet)) {
