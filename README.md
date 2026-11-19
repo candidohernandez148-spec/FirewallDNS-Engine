@@ -11,7 +11,7 @@ Crear un motor rápido, explicable y comprobable que centralice decisiones de re
 - `engine-core`: reglas BLOCK / OBSERVE / ALLOW, normalización de dominios, reglas por aplicación, prioridades, caducidad y publicación atómica de snapshots.
 - `dns-engine`: parser estricto para consultas DNS de una pregunta, validación de EDNS(0), evaluación con el motor de políticas y respuesta NXDOMAIN sintética para bloqueos.
 
-El parser DNS actual acepta consultas IN con una pregunta y, opcionalmente, un único registro EDNS(0) OPT. Incluye el codec del prefijo de longitud DNS-over-TCP, pero no implementa sockets UDP/TCP, reenvío a upstream, gestión de flujos, fragmentación ni integración VPN. Los tipos de registro se filtran por nombre de dominio, no se interpretan sus RDATA.
+El parser DNS actual acepta consultas IN con una pregunta y, opcionalmente, un único registro EDNS(0) OPT. Incluye el codec del prefijo de longitud DNS-over-TCP, pero no implementa sockets UDP/TCP, reenvío a upstream, gestión de flujos, fragmentación ni integración VPN. La inteligencia de amenazas es una base local inicial, no un feed exhaustivo de malware/phishing ni una garantía de detección. Los tipos de registro se filtran por nombre de dominio, no se interpretan sus RDATA.
 
 ## Decisiones iniciales
 - Repositorio privado durante el desarrollo.
