@@ -26,6 +26,7 @@
 - [x] Timeouts acotados, validación de respuestas y hook de protección de sockets.
 - [x] Adaptador Android aislado para conectar la protección de sockets con VpnService.protect (sin integración en el servicio VPN actual).
 - [x] Cancelación estructurada por intercambio: cierre del socket activo durante UDP/TCP; pruebas locales de cancelación.
+- [x] Failover secuencial configurable entre upstreams cuando un resolutor falla; conserva cancelación como resultado terminal y no fija proveedores públicos.
 - [x] Caché acotada de respuestas DNS positivas/negativas con TTL, separada de la caché de decisiones; usa reloj monotónico, clave aislada por upstream/consulta/EDNS/CD, límites de entradas/bytes y reescritura de ID/flags/TTL.
 - [x] Harness reproducible JVM de P50/P95/P99 para UDP loopback, caché y evaluación de políticas, con workflow y cálculo nearest-rank.
 - [ ] Compilar y ejecutar el harness Android de instrumentación en Samsung A34 5G; medir después VPN activa/protect(), red real y comparar con Firestack.
