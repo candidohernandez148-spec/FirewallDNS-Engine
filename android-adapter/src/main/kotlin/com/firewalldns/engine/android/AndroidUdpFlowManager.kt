@@ -109,8 +109,12 @@ class AndroidUdpFlowManager(
                 return false
             }
             val accepted = outbound.offer(datagram.copyOf())
-            if (!accepted) rejected.incrementAndGet()
-            return accepted
+            if (!accepted || !active.get()) {
+                rejected.incrementAndGet()
+                if (!active.get()) outbound.clear()
+                return false
+            }
+            return true
         }
 
         override fun close() {
