@@ -21,6 +21,10 @@ class AndroidEngineRuntime(vpnService: VpnService) {
 
     private val socketProtector = AndroidDnsSocketProtector(vpnService)
 
+    /** Creates protected per-flow UDP sockets; callers own and must close each socket. */
+    fun createProtectedUdpSocketFactory(): AndroidProtectedUdpSocketFactory =
+        AndroidProtectedUdpSocketFactory(socketProtector)
+
     /**
      * Builds a bounded sequential failover client whose UDP and TCP sockets
      * are protected by the active Android VpnService before connect().
