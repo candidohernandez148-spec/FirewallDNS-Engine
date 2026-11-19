@@ -11,6 +11,7 @@ import com.firewalldns.engine.dns.DnsUpstreamResult
 import java.net.DatagramSocket
 import java.net.Socket
 import java.time.Instant
+import java.util.UUID
 import kotlin.math.ceil
 
 /**
@@ -57,7 +58,11 @@ internal object PublicDnsBenchmark {
             var failures = 0
             repeat(warmups + samples) { index ->
                 val id = (resolverIndex * 10_000 + index + 1) and 0xffff
-                val query = dnsQuery("example.com", id)
+                // A fresh, unpredictable QNAME per request avoids measuring a
+                // recursive resolver's cached answer for the same example.com.
+                val nonce = UUID.randomUUID().toString().replace("-", "").take(12)
+                val queryName = "fdns-$resolverIndex-$index-$nonce.example.com"
+                val query = dnsQuery(queryName, id)
                 val started = System.nanoTime()
                 val result = client.exchange(query)
                 val elapsed = System.nanoTime() - started
@@ -139,7 +144,8 @@ internal object PublicDnsBenchmark {
               "configuration": {
                 "warmup_per_resolver": $warmups,
                 "samples_per_resolver": $samples,
-                "query_name": "example.com",
+                "query_name_pattern": "fdns-resolverIndex-sampleIndex-randomNonce.example.com",
+                "unique_query_name_per_request": true,
                 "timeout_ms": 2500
               },
               "resolvers": [
