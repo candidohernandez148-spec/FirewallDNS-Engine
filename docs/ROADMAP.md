@@ -1,23 +1,31 @@
 # Hoja de ruta
 
 ## Fase 0 — Fundamentos y contratos
-- Definir contratos de decisión, identidad, eventos y ciclo de vida.
-- Documentar política de errores y privacidad.
-- Elegir stack y estructura Gradle tras una prueba técnica pequeña.
-- Salida: arquitectura revisada y decisiones registradas.
+- [x] Documentación de arquitectura, seguridad, pruebas y límites.
+- [x] Contratos puros de decisión y reglas.
+- [x] Build Kotlin/JVM separado de Android.
+- [ ] CI verde y pruebas reproducibles.
 
 ## Fase 1 — Núcleo de políticas
-- Modelos BLOCK/OBSERVE/ALLOW.
-- Precedencia explícita de reglas de usuario, reglas administradas, allowlist esencial y señales heurísticas.
-- Evaluación determinista, explicable y con motivo.
-- Pruebas unitarias y de concurrencia.
-- Salida: motor puro, sin dependencias Android ni I/O en ruta crítica.
+- [x] Modelos BLOCK/OBSERVE/ALLOW.
+- [x] Precedencia y prioridades explícitas.
+- [x] Evaluación determinista, explicable y con motivo.
+- [x] Normalización IDN y soporte de etiquetas DNS de servicio.
+- [x] Reglas por aplicación, caducidad y activación.
+- [x] Reemplazo atómico de reglas.
+- [ ] Pruebas de concurrencia y benchmark de latencia.
+- [ ] CI verde en GitHub Actions.
 
 ## Fase 2 — DNS y caché
-- Normalización segura de nombres DNS (IDN, minúsculas, punto final y validación).
-- Evaluación A/AAAA y otros tipos según semántica del registro.
-- Caché positiva/negativa con TTL, límites e invalidación.
-- Pruebas UDP/TCP, respuestas malformadas, NXDOMAIN y latencia.
+- [x] Parser inicial de consultas de una pregunta.
+- [x] Validación de cabecera, QNAME, QTYPE/QCLASS y límites.
+- [x] Soporte de un registro EDNS(0) OPT y respuesta bloqueada NXDOMAIN.
+- [x] Evaluación de DNS a través del motor de políticas.
+- [ ] Suite completa de casos malformados y fuzzing.
+- [ ] Transporte DNS UDP y TCP.
+- [ ] Reenvío upstream, timeouts y cancelación.
+- [ ] Caché positiva/negativa con TTL, límites e invalidación.
+- [ ] Medición DNS P50/P95/P99.
 
 ## Fase 3 — Identidad de aplicación y conexiones
 - Resolver UID/paquete con APIs compatibles.
