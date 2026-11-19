@@ -2,6 +2,11 @@ name: DNS Latency Benchmarks
 
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/dns-latency-benchmarks.yml"
+      - "dns-engine/src/test/kotlin/com/firewalldns/engine/dns/DnsLatencyBenchmarkTest.kt"
 
 jobs:
   dns-latency:
