@@ -46,7 +46,7 @@ OBSERVE registra señales y permite el tráfico; no equivale a bloquear.
 - No se prometerá inspección total del tráfico cifrado ni atribución de aplicación sin evidencia.
 
 ## Estrategia de transporte
-Definir interfaces y medir alternativas. Se prefiere integrar un stack probado antes que implementar TCP/IP desde cero. Ningún stack existente se elimina ni sustituye en FirewallDNS hasta que un candidato independiente pase pruebas de compatibilidad, seguridad y rendimiento.
+Definir interfaces y medir alternativas. Se prefiere integrar un stack probado antes que implementar TCP/IP desde cero. Firestack se toma como referencia temporal para inventariar capacidades y comparar resultados, no como motor alternativo ni dependencia objetivo. FirewallDNS-Engine será la única autoridad de políticas y filtrado. La retirada de Firestack en Android se habilita solo cuando el motor nuevo cubra las capacidades necesarias y supere pruebas de compatibilidad, seguridad, estabilidad y rendimiento.
 
 ## Estado del prototipo de inteligencia local
 
