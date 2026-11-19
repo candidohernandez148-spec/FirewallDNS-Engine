@@ -81,8 +81,8 @@ class TunDiagnosticVpnService : VpnService() {
 
         thread(name = "firewalldns-diagnostic-tun-probes") {
             try {
-                val protectStarted = System.nanoTime()
                 val protectSocket = DatagramSocket(null)
+                val protectStarted = System.nanoTime()
                 val protectResult = try {
                     protect(protectSocket)
                 } finally {
