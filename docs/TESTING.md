@@ -53,3 +53,8 @@ Registrar baseline y candidato:
 6. Rollback disponible antes de integrar en FirewallDNS.
 
 Los umbrales numéricos se fijarán tras capturar línea base en hardware real; no se inventarán objetivos sin medición.
+
+
+## Adaptador Android de protección de sockets
+
+El módulo `:android-adapter` se valida en CI con `gradle test` y `gradle :android-adapter:assembleDebug`. Las pruebas unitarias verifican la delegación de sockets UDP y TCP a `VpnService.protect`, tanto cuando Android acepta la protección como cuando la rechaza. La validación en dispositivo real sigue pendiente: confirmar que los sockets upstream quedan fuera del TUN y que no hay bucles ni fugas DNS al alternar Wi-Fi/datos.
