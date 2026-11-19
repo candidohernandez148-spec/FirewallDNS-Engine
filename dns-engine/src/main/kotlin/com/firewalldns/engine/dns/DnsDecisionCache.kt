@@ -68,7 +68,7 @@ class DnsDecisionCache(
 
             if (entryCount.get() >= maxEntries) {
                 val victim = entries.entries.firstOrNull()
-                if (victim == null) continue
+                if (victim == null) return
                 if (entries.remove(victim.key, victim.value)) entryCount.decrementAndGet()
                 continue
             }
