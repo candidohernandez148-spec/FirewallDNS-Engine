@@ -28,6 +28,8 @@ class ThreatAnalyzerTest {
         assertEquals(PolicyAction.OBSERVE, result.action)
         assertEquals(2, result.signals.size)
         assertTrue(result.riskScore in 1..100)
+        assertTrue(result.signals.all { it.source == RuleSource.HEURISTIC })
+        assertEquals(RuleSource.HEURISTIC, result.source)
     }
 
     @Test fun essentialServiceDomainsAvoidLexicalHeuristics() {
@@ -65,18 +67,18 @@ class ThreatAnalyzerTest {
         }
     }
 
-    @Test fun learnedIndicatorsCannotDirectlyBlockEvenAtHighConfidence() {
+    @Test fun heuristicIndicatorsCannotDirectlyBlockEvenAtHighConfidence() {
         assertFailsWith<IllegalArgumentException> {
             ThreatAnalyzer(
                 indicators = listOf(
                     ThreatIndicator(
-                        id = "learned-high",
-                        domain = "learned.example",
+                        id = "heuristic-high",
+                        domain = "heuristic.example",
                         category = ThreatCategory.MALWARE,
                         confidence = 99,
                         action = PolicyAction.BLOCK,
-                        source = RuleSource.LEARNED,
-                        reason = "unverified_learned_signal",
+                        source = RuleSource.HEURISTIC,
+                        reason = "unverified_heuristic_signal",
                     ),
                 ),
                 safeDomains = emptyList(),
