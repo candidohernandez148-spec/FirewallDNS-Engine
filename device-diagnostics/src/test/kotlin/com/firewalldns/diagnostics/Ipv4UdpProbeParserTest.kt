@@ -22,7 +22,7 @@ class Ipv4UdpProbeParserTest {
         assertNull(Ipv4UdpProbeParser.parse(wrongDestination, wrongDestination.size))
         val wrongProtocol = packet(20).also { it[9] = 6 }
         assertNull(Ipv4UdpProbeParser.parse(wrongProtocol, wrongProtocol.size))
-        val wrongPort = packet(20).also { it[23] = 0x10 }
+        val wrongPort = packet(20).also { it[22] = 0; it[23] = 53 }
         assertNull(Ipv4UdpProbeParser.parse(wrongPort, wrongPort.size))
         val wrongMagic = packet(20).also { it[28] = 0 }
         assertNull(Ipv4UdpProbeParser.parse(wrongMagic, wrongMagic.size))
