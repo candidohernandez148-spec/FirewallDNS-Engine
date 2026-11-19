@@ -40,6 +40,7 @@ object DnsMessageParser {
         if ((flags ushr 11) and 0x0f != 0) return invalid("dns_opcode_unsupported")
         if (flags and 0x0200 != 0) return invalid("dns_truncated_query")
         if (flags and 0x0040 != 0) return invalid("dns_reserved_flag_set")
+        if (flags and 0x000f != 0) return invalid("dns_query_rcode_nonzero")
         if (qdCount != 1) return invalid("dns_question_count_unsupported")
         if (anCount != 0 || nsCount != 0) return invalid("dns_query_sections_unsupported")
         if (arCount > 1) return invalid("dns_additional_count_unsupported")
@@ -115,6 +116,5 @@ object DnsMessageParser {
 
     private const val HEADER_SIZE = 12
     private const val MAX_MESSAGE_SIZE = 65_535
-    private const val CLASS_IN = 1
     private const val TYPE_OPT = 41
 }
