@@ -10,7 +10,6 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
 import java.util.concurrent.RejectedExecutionException
 import java.util.concurrent.ThreadFactory
-import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
 
@@ -129,8 +128,8 @@ class AndroidUdpFlowManager(
             val receiveBuffer = ByteArray(datagramLimit)
             try {
                 while (active.get() && !closed.get()) {
-                    val pending = outbound.poll()
-                    if (pending != null) {
+                    while (true) {
+                        val pending = outbound.poll() ?: break
                         socket.send(DatagramPacket(pending, pending.size))
                         sent.incrementAndGet()
                     }
