@@ -18,7 +18,7 @@
 - Un fallo de almacenamiento o monitorización no cambia silenciosamente la política.
 - Colas y cachés con límites para evitar consumo ilimitado.
 
-## Límites
+## Inteligencia local inicial\n- Los indicadores incorporados son una base pequeña y curada para dominios de publicidad y tracking; no representan un feed completo de malware o phishing.\n- Las señales léxicas débiles producen OBSERVE, nunca BLOCK.\n- Solo indicadores confiables con confianza alta y fuente no aprendida pueden sugerir BLOCK.\n- Las reglas explícitas del usuario se evalúan antes de la inteligencia de amenazas.\n- La allowlist protege dominios esenciales frente a heurísticas, pero no invalida una regla explícita del usuario ni un indicador confiable específico.\n\n## Límites
 - No afirmar inspección de HTTPS, DoH o DoT si solo se observan metadatos.
 - No inferir identidad de aplicación sin evidencia Android.
 - No almacenar contenido de paquetes si bastan metadatos.
