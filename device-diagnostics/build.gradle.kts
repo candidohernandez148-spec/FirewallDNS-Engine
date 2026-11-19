@@ -31,5 +31,6 @@ android {
 
 dependencies {
     implementation(project(":dns-engine"))
+    implementation(project(":android-adapter"))
     testImplementation("junit:junit:4.13.2")
 }
