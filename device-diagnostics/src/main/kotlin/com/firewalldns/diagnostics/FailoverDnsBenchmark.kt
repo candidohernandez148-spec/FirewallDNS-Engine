@@ -14,6 +14,7 @@ import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.net.Socket
 import java.time.Instant
+import java.util.UUID
 import kotlin.math.ceil
 
 /**
@@ -69,7 +70,8 @@ internal object FailoverDnsBenchmark {
                     )
                     val failover = DnsUpstreamFailoverClient(listOf(primary, secondary), maxAttempts = 2)
                     val id = (resolverIndex * 20_000 + index + 1) and 0xffff
-                    val query = dnsQuery("failover$index.example.com", id)
+                    val nonce = UUID.randomUUID().toString().replace("-", "").take(12)
+                    val query = dnsQuery("fdns-failover-$resolverIndex-$index-$nonce.example.com", id)
                     val started = System.nanoTime()
                     val result = failover.exchange(query)
                     val elapsed = System.nanoTime() - started
@@ -144,7 +146,8 @@ internal object FailoverDnsBenchmark {
                     "samples_per_secondary": $samples,
                     "primary_timeout_ms": $primaryTimeoutMs,
                     "secondary_timeout_ms": $secondaryTimeoutMs,
-                    "query_name_pattern": "failoverN.example.com"
+                    "query_name_pattern": "fdns-failover-resolverIndex-sampleIndex-randomNonce.example.com",
+                    "unique_query_name_per_request": true
                   },
                   "results": [
                     $resultsJson
