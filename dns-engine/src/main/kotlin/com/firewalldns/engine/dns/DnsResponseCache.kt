@@ -26,7 +26,7 @@ class DnsResponseCache(
 
     init {
         require(maxEntries > 0) { "maxEntries must be positive" }
-        require(maxBytes > 0) { "maxBytes must be positive" }
+        require(maxBytes in 1..MAX_BYTES_LIMIT) { "maxBytes is out of range" }
         require(maxTtlSeconds in 1..(Long.MAX_VALUE / NANOS_PER_SECOND)) { "maxTtlSeconds is out of range" }
     }
 
@@ -254,6 +254,7 @@ class DnsResponseCache(
     private companion object {
         const val DEFAULT_MAX_ENTRIES = 2_048
         const val DEFAULT_MAX_BYTES = 4 * 1024 * 1024
+        const val MAX_BYTES_LIMIT = 64 * 1024 * 1024
         const val DEFAULT_MAX_TTL_SECONDS = 86_400L
         const val NANOS_PER_SECOND = 1_000_000_000L
         const val DNS_HEADER_SIZE = 12
