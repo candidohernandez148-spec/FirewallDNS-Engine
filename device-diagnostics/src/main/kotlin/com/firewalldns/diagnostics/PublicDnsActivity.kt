@@ -25,6 +25,8 @@ class PublicDnsActivity : Activity() {
     private lateinit var engineTunButton: Button
     private lateinit var stopEngineTunButton: Button
     @Volatile private var report: String? = null
+    @Volatile private var engineTunReport: String? = null
+    private var engineTunStartedAtElapsed = 0L
     private var receiverRegistered = false
 
     private val tunResultReceiver = object : BroadcastReceiver() {
@@ -52,7 +54,33 @@ class PublicDnsActivity : Activity() {
             val observed = intent.getLongExtra("observed", 0)
             val allowed = intent.getLongExtra("allowed", 0)
             val rejected = intent.getLongExtra("rejected", 0)
-            status.text = "Motor propio en TUN: $state\nPaquetes recibidos: $packets\nDNS procesados: $processed\nRespuestas enviadas: $sent\nBLOCK: $blocked | OBSERVE: $observed | ALLOW: $allowed\nRechazados: $rejected\nDescartados: $dropped\nActualización automática cada 0,5 segundos.\n\nSolo se enruta al túnel el DNS dirigido a sus direcciones virtuales; no es un firewall de todo el tráfico."
+            val updatedAt = intent.getLongExtra("updated_at_elapsed_ms", android.os.SystemClock.elapsedRealtime())
+            val startedAt = engineTunStartedAtElapsed.takeIf { it > 0L } ?: updatedAt
+            val durationMs = (updatedAt - startedAt).coerceAtLeast(0L)
+            engineTunReport = """{
+  "format": "firewalldns-engine-tun-diagnostic",
+  "schema_version": 1,
+  "state": "$state",
+  "duration_ms": $durationMs,
+  "metrics": {
+    "packets_in": $packets,
+    "dns_processed": $processed,
+    "responses_out": $sent,
+    "blocked": $blocked,
+    "observed": $observed,
+    "allowed": $allowed,
+    "rejected": $rejected,
+    "dropped": $dropped
+  },
+  "privacy": {
+    "domain_names_recorded": false,
+    "packet_payloads_recorded": false
+  },
+  "updated_at_elapsed_ms": $updatedAt
+}"""
+            report = engineTunReport
+            status.text = "Motor propio en TUN: $state\nPaquetes recibidos: $packets\nDNS procesados: $processed\nRespuestas enviadas: $sent\nBLOCK: $blocked | OBSERVE: $observed | ALLOW: $allowed\nRechazados: $rejected\nDescartados: $dropped\nDuración: \${durationMs / 1000}s\n\nPulsa «Guardar informe JSON» para exportar estos datos. Se actualizan cada 0,5 segundos.\n\nSolo se enruta al túnel el DNS dirigido a sus direcciones virtuales; no es un firewall de todo el tráfico."
+            exportButton.isEnabled = true
             engineTunButton.isEnabled = state != "running" && state != "starting"
             stopEngineTunButton.isEnabled = state == "running" || state == "starting" || state == "stopping"
         }
@@ -187,6 +215,10 @@ class PublicDnsActivity : Activity() {
     private fun startEngineTunService() {
         engineTunButton.isEnabled = false
         stopEngineTunButton.isEnabled = true
+        engineTunStartedAtElapsed = android.os.SystemClock.elapsedRealtime()
+        engineTunReport = null
+        report = null
+        exportButton.isEnabled = false
         status.text = "Iniciando VPN DNS de diagnóstico con FirewallDNS-Engine. Desactiva antes cualquier otra VPN. No se modifica el DNS global del teléfono."
         val start = Intent(this, EngineTunVpnService::class.java)
             .setAction(EngineTunVpnService.ACTION_START)
@@ -247,10 +279,10 @@ class PublicDnsActivity : Activity() {
 
     private fun saveReport() {
         val content = report ?: return
-        val filename = if (content.contains("firewalldns-tun-diagnostic")) {
-            "firewalldns-diagnostico-tun.json"
-        } else {
-            "firewalldns-dns-publico.json"
+        val filename = when {
+            content.contains("firewalldns-engine-tun-diagnostic") -> "firewalldns-engine-tun-diagnostico.json"
+            content.contains("firewalldns-tun-diagnostic") -> "firewalldns-diagnostico-tun.json"
+            else -> "firewalldns-dns-publico.json"
         }
         val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
             addCategory(Intent.CATEGORY_OPENABLE)
