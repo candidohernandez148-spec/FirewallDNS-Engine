@@ -19,10 +19,8 @@ sealed interface DnsParseResult {
 
 /**
  * Strict parser for a single-question DNS query.
- *
- * It accepts no answer/authority records and at most one EDNS(0) OPT record.
- * Name compression is rejected in the question and OPT owner name. Transport
- * framing (UDP datagram or TCP two-byte length prefix) belongs to the adapter.
+ * Accepts no answer/authority records and at most one EDNS(0) OPT record.
+ * Transport framing (UDP datagram or TCP length prefix) belongs to the adapter.
  */
 object DnsMessageParser {
     fun parse(packet: ByteArray): DnsParseResult {
@@ -57,8 +55,8 @@ object DnsMessageParser {
             wireNameLength += length + 1
             if (wireNameLength > 255) return invalid("dns_qname_too_long")
             val bytes = packet.copyOfRange(offset, offset + length)
-            if (bytes.any { (it.toInt() and 0xff) !in 0x21..0x7e }) {
-                return invalid("dns_label_non_ascii")
+            if (bytes.any { (it.toInt() and 0xff) !in 0x21..0x7e || it == '.'.code.toByte() }) {
+                return invalid("dns_label_non_hostname_ascii")
             }
             labels += String(bytes, StandardCharsets.US_ASCII)
             offset += length
@@ -69,16 +67,14 @@ object DnsMessageParser {
         val dnsClass = u16(packet, offset + 2)
         offset += 4
         val questionEnd = offset
-
         if (dnsClass != CLASS_IN) return invalid("dns_class_unsupported")
 
         if (arCount == 1) {
-            // EDNS(0) OPT: root owner name, type 41, fixed fields and bounded RDATA.
             if (offset + 11 > packet.size) return invalid("dns_opt_truncated")
             if ((packet[offset++].toInt() and 0xff) != 0) return invalid("dns_opt_owner_unsupported")
             if (u16(packet, offset) != TYPE_OPT) return invalid("dns_additional_record_unsupported")
-            offset += 2 // TYPE
-            offset += 4 // UDP payload size and extended RCODE/version/flags
+            offset += 2
+            offset += 4
             val rdLength = u16(packet, offset)
             offset += 2
             if (offset + rdLength != packet.size) return invalid("dns_opt_rdata_length_invalid")
@@ -86,12 +82,11 @@ object DnsMessageParser {
         }
         if (offset != packet.size) return invalid("dns_trailing_bytes")
 
-        val domain = labels.joinToString(".")
         return DnsParseResult.Valid(
             DnsQuestion(
                 id = id,
                 requestFlags = flags,
-                domain = domain,
+                domain = labels.joinToString("."),
                 type = type,
                 dnsClass = dnsClass,
                 wireQuestion = packet.copyOfRange(questionStart, questionEnd),
@@ -100,7 +95,6 @@ object DnsMessageParser {
     }
 
     private fun invalid(reason: String) = DnsParseResult.Invalid(reason)
-
     private fun u16(bytes: ByteArray, offset: Int): Int =
         ((bytes[offset].toInt() and 0xff) shl 8) or (bytes[offset + 1].toInt() and 0xff)
 
