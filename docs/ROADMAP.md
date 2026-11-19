@@ -35,8 +35,7 @@
 - [x] Heurísticas léxicas conservadoras que solo generan OBSERVE.
 - [x] Reglas explícitas del usuario prevalecen sobre indicadores integrados y heurísticas.
 - [x] Decisiones deterministas sin aprendizaje persistente ni entrenamiento con el tráfico del usuario.
-- [ ] Feed verificable y actualizable de malware/phishing, con firma y caducidad.
-- [ ] Feed curado, verificable y actualizable de malware/phishing, con firma y caducidad (sin aprendizaje del tráfico del usuario).
+- [ ] Feed curado, verificable y actualizable de malware/phishing, con firma y caducidad; actualización por versiones revisadas, sin aprendizaje del tráfico del usuario.
 - [ ] Medición de falsos positivos en aplicaciones reales.
 
 ## Fase 4 — Identidad de aplicación y conexiones
