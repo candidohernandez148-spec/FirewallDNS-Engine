@@ -48,6 +48,8 @@ No se elimina Firestack ni se cambia el servicio VPN predeterminado antes de sup
 6. Implementar adaptadores Android y ejecutar la matriz de pruebas en dispositivo.
 7. Cambiar el servicio activo al motor nuevo y retirar Firestack tras la validación.
 
-## Estado inicial revisado
+## Estado actual revisado
 
-En el estado inspeccionado, el repositorio del motor contiene módulos Gradle JVM para `engine-core`, `dns-engine`, `threat-engine` y `engine-monitor`. Aún no contiene un motor completo de paquetes/conexiones ni un adaptador Android. La aplicación todavía declara Firestack como dependencia y mantiene un servicio DNS clásico separado. Por tanto, la sustitución completa no es segura todavía.
+El repositorio contiene módulos Gradle para `engine-core`, `dns-engine`, `threat-engine`, `engine-monitor`, `engine-runtime` y `android-adapter`. El adaptador Android implementa la protección de sockets upstream UDP/TCP mediante `VpnService.protect()` y tiene pruebas unitarias JVM. También existe un benchmark de instrumentación Android para loopback y caché, cuya compilación y ejecución en dispositivo deben validarse en CI y hardware real.
+
+Todavía no existe un plano de datos VPN completo: faltan TUN, procesamiento de paquetes/conexiones, identidad Android y pruebas de protección de sockets dentro de una VPN activa. La sustitución completa no es segura. Firestack debe permanecer como referencia de paridad hasta superar las puertas descritas en este plan.
