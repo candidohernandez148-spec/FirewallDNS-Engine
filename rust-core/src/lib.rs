@@ -5,6 +5,10 @@
 //! Kotlin remains the production authority until parity and device benchmarks
 //! justify a measured migration.
 
+mod tun_device;
+
+pub use tun_device::{TunPacketDevice, TunQueueError};
+
 use jni::objects::{JByteArray, JObject};
 use jni::sys::jint;
 use jni::JNIEnv;
