@@ -4,6 +4,7 @@ import com.firewalldns.engine.core.PolicyAction
 import com.firewalldns.engine.core.PolicyEngine
 import com.firewalldns.engine.core.PolicyRule
 import com.firewalldns.engine.core.RuleSource
+import com.firewalldns.engine.monitor.EngineMonitor
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
@@ -18,6 +19,28 @@ class DnsPolicyAdapterTest {
         assertEquals(0x8103, u16(result.response, 2)) // QR + preserved RD + NXDOMAIN
         assertEquals(1, u16(result.response, 4))
         assertContentEquals(request.copyOfRange(12, request.size), result.response.copyOfRange(12, result.response.size))
+    }
+
+    @Test fun publishesDecisionAndCacheMetricsToMonitor() {
+        val monitor = EngineMonitor(captureDomains = true)
+        val adapter = DnsPolicyAdapter(PolicyEngine(), monitor = monitor)
+        adapter.evaluate(query("ads.doubleclick.net"), nowEpochMillis = 1)
+        adapter.evaluate(query("ads.doubleclick.net"), nowEpochMillis = 2)
+
+        val metrics = monitor.snapshot()
+        assertEquals(2, metrics.decisions)
+        assertEquals(2, metrics.blocked)
+        assertEquals(1, metrics.cacheMisses)
+        assertEquals(1, metrics.cacheHits)
+        assertEquals("ads.doubleclick.net", monitor.pollEvent()?.domain)
+    }
+
+    @Test fun malformedDnsIsCountedAsRejectedByMonitor() {
+        val monitor = EngineMonitor()
+        val result = DnsPolicyAdapter(PolicyEngine(), monitor = monitor)
+            .evaluate(byteArrayOf(1, 2, 3), nowEpochMillis = 10)
+        assertIs<DnsEvaluation.Rejected>(result)
+        assertEquals(1, monitor.snapshot().rejected)
     }
 
     @Test fun builtInThreatIntelligenceBlocksKnownAdDeliveryDomain() {
