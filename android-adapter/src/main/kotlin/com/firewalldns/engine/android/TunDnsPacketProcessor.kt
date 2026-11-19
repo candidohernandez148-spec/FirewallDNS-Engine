@@ -14,8 +14,8 @@ import com.firewalldns.engine.runtime.EngineRuntime
  */
 class TunDnsPacketProcessor(
     private val engine: EngineRuntime,
-    private val exchangeUpstream: (ByteArray) -> DnsUpstreamResult,
     private val maxDnsPayloadBytes: Int = 1232,
+    private val exchangeUpstream: (ByteArray) -> DnsUpstreamResult,
 ) {
     init {
         require(maxDnsPayloadBytes in 512..4096)
