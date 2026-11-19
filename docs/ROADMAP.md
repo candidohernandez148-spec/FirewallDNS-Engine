@@ -47,9 +47,11 @@
 - Metadatos TCP/UDP sin fingir inspección de contenido cifrado.
 
 ## Fase 5 — Adaptador VPN y transporte
-- Prototipo aislado con VpnService/TUN.
+- [x] Prototipo aislado VpnService/TUN para DNS UDP real, limitado a direcciones virtuales y con upstream protegido (diagnóstico; no es VPN de tráfico general).
 - Evaluar stack probado frente a alternativas nativas.
-- Validar IPv4/IPv6, MTU, fragmentación, ICMP, TCP/UDP, DNS TCP, checksums y reconexiones.
+- [x] Procesamiento inicial de UDP DNS IPv4/IPv6 básico, checksum de respuestas y decisiones BLOCK/OBSERVE/ALLOW con pruebas unitarias.
+- [ ] DNS-over-TCP del lado del cliente, fragmentación IP, cabeceras de extensión IPv6, MTU/fragmentación y demás protocolos mediante stack probado.
+- [ ] Integrar el plano de datos en FirewallDNS solo después de completar cobertura, pruebas de fuga/bucle y comparación de rendimiento.
 - Validar protect(), ausencia de bucles y DNS leaks.
 
 ## Fase 6 — Observabilidad y rendimiento
