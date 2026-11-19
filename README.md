@@ -2,28 +2,25 @@
 
 Motor independiente de filtrado y protección de red para Android. Este repositorio se desarrolla separado de [FirewallDNS](https://github.com/candidohernandez148-spec/FirewallDNS) y no modifica ni sustituye su implementación actual.
 
-> Estado: **prototipo Kotlin/JVM en desarrollo**. El núcleo de políticas y un adaptador DNS inicial están implementados en una rama de trabajo; todavía no es un motor listo para proteger tráfico real.
-
-## Objetivo
-Crear un motor rápido, explicable y comprobable que centralice decisiones de red, filtrado DNS, políticas por aplicación, señales locales de amenazas y observabilidad. La prioridad es la fiabilidad del filtrado, la baja latencia y evitar falsos positivos.
+> Estado: **prototipo Kotlin/JVM en desarrollo**. El núcleo de políticas, un adaptador DNS inicial y una primera capa de inteligencia local ya están implementados en una rama de trabajo. Todavía no es un motor listo para proteger tráfico real.
 
 ## Componentes implementados en la rama de trabajo
-- `engine-core`: reglas BLOCK / OBSERVE / ALLOW, normalización de dominios, reglas por aplicación, prioridades, caducidad y publicación atómica de snapshots.
-- `dns-engine`: parser estricto para consultas DNS de una pregunta, validación de EDNS(0), evaluación con el motor de políticas y respuesta NXDOMAIN sintética para bloqueos.
+- `engine-core`: reglas BLOCK / OBSERVE / ALLOW, normalización IDN y etiquetas DNS de servicio, reglas por aplicación, prioridades, caducidad y snapshots atómicos con revisión.
+- `dns-engine`: parser estricto de consultas DNS de una pregunta, validación EDNS(0), NXDOMAIN sintético, framing DNS-over-TCP y caché acotada de decisiones con TTL y revisión de políticas.
+- `threat-engine`: indicadores locales iniciales de publicidad y tracking, allowlist de dominios esenciales y heurísticas conservadoras que solo generan OBSERVE. Los indicadores confiables seleccionados pueden sugerir BLOCK.
 
-El parser DNS actual acepta consultas IN con una pregunta y, opcionalmente, un único registro EDNS(0) OPT. Incluye el codec del prefijo de longitud DNS-over-TCP, pero no implementa sockets UDP/TCP, reenvío a upstream, gestión de flujos, fragmentación ni integración VPN. La inteligencia de amenazas es una base local inicial, no un feed exhaustivo de malware/phishing ni una garantía de detección. Los tipos de registro se filtran por nombre de dominio, no se interpretan sus RDATA.
+El parser DNS acepta consultas de una pregunta y, opcionalmente, un único registro EDNS(0) OPT. El codec TCP solo gestiona el prefijo de longitud; todavía no implementa sockets UDP/TCP, reenvío upstream, gestión de flujos, fragmentación ni integración VPN. La inteligencia de amenazas es una base local inicial, no un feed exhaustivo de malware/phishing ni una garantía de detección. Los tipos de registro se filtran por nombre de dominio, no se interpretan sus RDATA.
 
-## Decisiones iniciales
-- Repositorio privado durante el desarrollo.
-- Procesamiento y aprendizaje locales por defecto.
-- Decisiones explícitas: **BLOCK**, **OBSERVE** y **ALLOW**.
-- La ruta crítica no realiza operaciones de disco ni trabajo bloqueante.
-- Se medirá antes de optimizar; no se inventan cifras objetivo.
-- Se evaluarán stacks de red probados antes de plantear TCP/IP propio.
-- No se sustituirá Firestack ni se integrará en FirewallDNS hasta superar criterios de aceptación y pruebas reales.
+## Decisiones y límites
+- Repositorio privado durante el desarrollo; no modifica FirewallDNS.
+- Procesamiento local por defecto, sin telemetría externa.
+- OBSERVE permite el tráfico; las heurísticas débiles nunca bloquean.
+- Reglas explícitas del usuario prevalecen sobre la inteligencia automática.
+- No se reimplementará TCP/IP desde cero sin evidencia y benchmark.
+- No se sustituirá Firestack ni se integrará en FirewallDNS hasta superar pruebas funcionales, seguridad y rendimiento en hardware real.
 
 ## Módulos previstos
-engine-core, policy-engine, dns-engine, packet-engine, connection-engine, app-identity, threat-engine, fast-cache y engine-monitor.
+engine-core, dns-engine, threat-engine, app-identity, packet-engine, connection-engine, fast-cache y engine-monitor.
 
 ## Documentación
 - [Arquitectura](docs/ARCHITECTURE.md)
