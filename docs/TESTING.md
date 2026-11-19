@@ -3,6 +3,7 @@
 ## Pruebas por capa
 - Policy Engine: precedencia, conflictos, expiración, reglas por aplicación, decisiones y explicabilidad.
 - DNS Engine: nombres inválidos, IDN, etiquetas de servicio, mayúsculas, punto final, EDNS(0), TLV malformado, clases DNS, NXDOMAIN y truncamiento.\n- DNS TCP framing: prefijo parcial, cuerpo parcial, longitud inválida, múltiples frames en un buffer y límites.
+- DNS upstream: respuesta UDP válida, ID/pregunta incorrectos, fallback TCP ante TC, clase DNS no IN, timeout, rechazo de socket no protegido y dirección upstream no numérica.
 - Fast Cache: concurrencia, expiración, invalidación, presión de memoria y resultados obsoletos.
 - App Identity: UID no disponible, paquete eliminado, perfiles de trabajo y restricciones Android.
 - Packet/Connection: IPv4/IPv6, UDP/TCP, ICMP, fragmentación, MTU, checksums, DNS TCP, cierres y reconexiones.
