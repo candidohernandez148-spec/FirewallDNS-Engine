@@ -20,6 +20,38 @@ class DnsPolicyAdapterTest {
         assertContentEquals(request.copyOfRange(12, request.size), result.response.copyOfRange(12, result.response.size))
     }
 
+    @Test fun builtInThreatIntelligenceBlocksKnownAdDeliveryDomain() {
+        val result = assertIs<DnsEvaluation.Blocked>(
+            DnsPolicyAdapter(PolicyEngine()).evaluate(query("ads.doubleclick.net")),
+        )
+        assertEquals("ads-doubleclick", result.decision.ruleId)
+        assertEquals(PolicyAction.BLOCK, result.decision.action)
+    }
+
+    @Test fun weakDomainHeuristicsOnlyObserveAndTrustedDomainsAreAllowed() {
+        val adapter = DnsPolicyAdapter(PolicyEngine())
+        val heuristic = assertIs<DnsEvaluation.Forward>(adapter.evaluate(query("ads-tracker.example.com")))
+        assertEquals(PolicyAction.OBSERVE, heuristic.decision.action)
+
+        val trusted = assertIs<DnsEvaluation.Forward>(adapter.evaluate(query("metrics.youtube.com")))
+        assertEquals(PolicyAction.ALLOW, trusted.decision.action)
+        assertEquals("trusted_domain_allowlist", trusted.decision.reason)
+    }
+
+    @Test fun explicitUserAllowOverridesBuiltInThreatIndicator() {
+        val allowRule = PolicyRule(
+            id = "user-allow-doubleclick",
+            domain = "doubleclick.net",
+            action = PolicyAction.ALLOW,
+            source = RuleSource.USER,
+            reason = "user_explicit_allow",
+        )
+        val result = assertIs<DnsEvaluation.Forward>(
+            DnsPolicyAdapter(PolicyEngine(listOf(allowRule))).evaluate(query("ads.doubleclick.net")),
+        )
+        assertEquals("user_explicit_allow", result.decision.reason)
+    }
+
     @Test fun policyReplacementCannotReuseStaleCachedDecision() {
         val engine = PolicyEngine(listOf(rule("ads.example.com", PolicyAction.BLOCK)))
         val adapter = DnsPolicyAdapter(engine, DnsDecisionCache())
