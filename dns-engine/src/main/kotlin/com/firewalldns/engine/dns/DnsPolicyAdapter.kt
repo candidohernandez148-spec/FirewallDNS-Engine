@@ -5,6 +5,7 @@ import com.firewalldns.engine.core.PolicyAction
 import com.firewalldns.engine.core.PolicyDecision
 import com.firewalldns.engine.core.PolicyEngine
 import com.firewalldns.engine.core.PolicyRequest
+import com.firewalldns.engine.threat.ThreatAnalyzer
 
 sealed interface DnsEvaluation {
     data class Forward(val question: DnsQuestion, val decision: PolicyDecision) : DnsEvaluation
@@ -16,6 +17,7 @@ sealed interface DnsEvaluation {
 class DnsPolicyAdapter(
     private val policyEngine: PolicyEngine,
     private val decisionCache: DnsDecisionCache = DnsDecisionCache(),
+    private val threatAnalyzer: ThreatAnalyzer = ThreatAnalyzer(),
 ) {
     fun evaluate(packet: ByteArray, appPackage: String? = null, nowEpochMillis: Long = System.currentTimeMillis()): DnsEvaluation {
         val question = when (val parsed = DnsMessageParser.parse(packet)) {
@@ -28,15 +30,28 @@ class DnsPolicyAdapter(
         val normalizedDomain = DomainNormalizer.normalize(question.domain)
             ?: return DnsEvaluation.Rejected("dns_qname_invalid_hostname")
         val cacheKey = DnsDecisionCacheKey(normalizedDomain, appPackage, policyEngine.revision)
-        val decision = decisionCache.get(cacheKey, nowEpochMillis) ?: policyEngine.evaluate(
-            PolicyRequest(normalizedDomain, appPackage),
-            nowEpochMillis,
-        ).also { evaluated ->
-            decisionCache.put(
-                DnsDecisionCacheKey(normalizedDomain, appPackage, evaluated.policyRevision),
-                evaluated,
+        val decision = decisionCache.get(cacheKey, nowEpochMillis) ?: run {
+            val policyDecision = policyEngine.evaluate(
+                PolicyRequest(normalizedDomain, appPackage),
                 nowEpochMillis,
             )
+            val effectiveDecision = if (policyDecision.reason == "no_matching_rule") {
+                val assessment = threatAnalyzer.analyze(normalizedDomain)
+                policyDecision.copy(
+                    action = assessment.action,
+                    reason = assessment.reason,
+                    ruleId = assessment.indicatorId,
+                    source = assessment.source,
+                )
+            } else {
+                policyDecision
+            }
+            decisionCache.put(
+                DnsDecisionCacheKey(normalizedDomain, appPackage, effectiveDecision.policyRevision),
+                effectiveDecision,
+                nowEpochMillis,
+            )
+            effectiveDecision
         }
         return when (decision.action) {
             PolicyAction.BLOCK -> DnsEvaluation.Blocked(question, decision, nxdomainResponse(question))
