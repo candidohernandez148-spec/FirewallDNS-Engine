@@ -4,7 +4,7 @@
 - [x] Documentación de arquitectura, seguridad, pruebas y límites.
 - [x] Contratos puros de decisión y reglas.
 - [x] Build Kotlin/JVM separado de Android.
-- [ ] CI verde y pruebas reproducibles en cada cambio.
+- [x] CI verde y pruebas reproducibles en cada cambio.
 
 ## Fase 1 — Núcleo de políticas
 - [x] Modelos BLOCK/OBSERVE/ALLOW.
@@ -21,11 +21,11 @@
 - [x] NXDOMAIN sintético con preservación segura de EDNS.
 - [x] Codec de framing DNS-over-TCP.
 - [x] Caché de decisiones acotada, con TTL y aislamiento por revisión de reglas.
-- [ ] Fuzzing y suite ampliada de mensajes malformados.
+- [x] Fuzzing y suite ampliada de mensajes malformados.
 - [x] Transporte DNS upstream UDP con fallback TCP ante respuestas truncadas.
 - [x] Timeouts acotados, validación de respuestas y hook de protección de sockets.
 - [ ] Adaptador Android para conectar la protección de sockets con VpnService.protect.
-- [ ] Cancelación estructurada y pruebas contra resolvers reales.
+- [x] Cancelación estructurada por intercambio: cierre del socket activo durante UDP/TCP; pruebas locales de cancelación.
 - [x] Caché acotada de respuestas DNS positivas/negativas con TTL, separada de la caché de decisiones; usa reloj monotónico, clave aislada por upstream/consulta/EDNS/CD, límites de entradas/bytes y reescritura de ID/flags/TTL.
 - [ ] Medición DNS P50/P95/P99.
 
