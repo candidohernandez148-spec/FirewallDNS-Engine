@@ -76,5 +76,11 @@ La caché de decisiones está acotada por número de entradas, usa TTL corto y l
 - La configuración explícita del usuario y las listas curadas podrán persistirse en la capa de aplicación, separadas de cualquier aprendizaje.
 - Colas de eventos acotadas; la saturación se contabiliza sin detener el filtrado.
 
+## Adaptador Android de protección DNS
+
+El módulo aislado `:android-adapter` implementa `DnsSocketProtector` mediante `VpnService.protect(DatagramSocket)` y `VpnService.protect(Socket)`. Delega directamente el resultado booleano de Android y no conecta ni envía datos por sí mismo. `DnsUpstreamClient` realiza la protección antes de conectar cada socket; un resultado falso se trata como fallo y no se intenta el transporte sin proteger. La instancia de `VpnService` debe pertenecer al servicio VPN activo y el adaptador no debe conservarla más allá de su ciclo de vida.
+
+Este módulo compila como Android Library (minSdk 24, compileSdk 36) y depende de `:dns-engine`. Su existencia no implica que el servicio VPN de FirewallDNS ya use el motor: la integración del plano de datos permanece bloqueada hasta completar las pruebas de paridad, compatibilidad, fugas, estabilidad y rendimiento.
+
 ## Evolución
 No se fijan todavía lenguaje, versión Android ni dependencias de red. Antes del primer módulo ejecutable se documentarán decisiones tecnológicas y se validará compatibilidad con el nivel mínimo de Android previsto.
