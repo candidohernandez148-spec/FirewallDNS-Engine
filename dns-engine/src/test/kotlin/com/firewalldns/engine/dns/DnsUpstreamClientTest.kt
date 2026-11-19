@@ -10,7 +10,7 @@ import kotlin.test.assertIs
 
 class DnsUpstreamClientTest {
     @Test fun forwardsUdpQueryAndValidatesResponse() {
-        DatagramSocket(0, InetAddress.getLoopbackAddress()).use { server ->
+        DatagramSocket(0, InetAddress.getByName("127.0.0.1")).use { server ->
             server.soTimeout = 2_000
             val query = query("example.com")
             val responder = thread {
@@ -32,7 +32,7 @@ class DnsUpstreamClientTest {
     }
 
     @Test fun rejectsResponseWithDifferentTransactionId() {
-        DatagramSocket(0, InetAddress.getLoopbackAddress()).use { server ->
+        DatagramSocket(0, InetAddress.getByName("127.0.0.1")).use { server ->
             server.soTimeout = 2_000
             val query = query("example.com")
             val responder = thread {
@@ -57,7 +57,7 @@ class DnsUpstreamClientTest {
     }
 
     @Test fun refusesUnprotectedSocketBeforeSending() {
-        DatagramSocket(0, InetAddress.getLoopbackAddress()).use { server ->
+        DatagramSocket(0, InetAddress.getByName("127.0.0.1")).use { server ->
             val query = query("example.com")
             val protector = object : DnsSocketProtector {
                 override fun protect(socket: DatagramSocket): Boolean = false
@@ -75,9 +75,9 @@ class DnsUpstreamClientTest {
 
 
     @Test fun retriesTruncatedUdpResponseOverTcp() {
-        java.net.ServerSocket(0, 1, InetAddress.getLoopbackAddress()).use { tcpServer ->
+        java.net.ServerSocket(0, 1, InetAddress.getByName("127.0.0.1")).use { tcpServer ->
             tcpServer.soTimeout = 2_000
-            DatagramSocket(tcpServer.localPort, InetAddress.getLoopbackAddress()).use { udpServer ->
+            DatagramSocket(tcpServer.localPort, InetAddress.getByName("127.0.0.1")).use { udpServer ->
                 udpServer.soTimeout = 2_000
                 val query = query("example.com")
                 val udpResponder = thread {
