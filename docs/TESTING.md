@@ -86,3 +86,11 @@ El módulo `:android-adapter` se valida en CI con `gradle test` y `gradle :andro
 ### Validación estructural de respuestas upstream
 - `DnsUpstreamResponseValidatorTest` verifica límites de registros, nombres comprimidos, RDLENGTH, bytes sobrantes y framing de opciones EDNS antes de que una respuesta sea devuelta como éxito.
 - La validación estructural no sustituye la revisión semántica de cada tipo de RDATA ni las pruebas con resolutores reales y respuestas adversariales.
+
+
+## Adaptador de paquetes DNS sobre TUN
+
+- `TunDnsPacketProcessorTest` comprueba solicitudes UDP DNS IPv4 e IPv6 básico, inversión de direcciones y puertos, checksum IPv4, checksum UDP no nulo en IPv6, decisión BLOCK sin upstream y rechazo explícito de TCP/fragmentos.
+- El APK independiente `:device-diagnostics` contiene `EngineTunVpnService`. Usa direcciones DNS virtuales y rutas /32 y /128, lector TUN, cola acotada de 256 paquetes, cuatro trabajadores y upstreams protegidos por `VpnService.protect()`.
+- La ejecución en CI compila el servicio y genera el APK, pero no sustituye la prueba en el Samsung A34 5G. En el dispositivo hay que confirmar que el contador de paquetes aumenta, que se reciben respuestas DNS, que BLOCK no llega al upstream, que OBSERVE sí reenvía, y que al detener el servicio se recupera el DNS normal.
+- Alcance actual: UDP DNS sobre IPv4 sin fragmentación y IPv6 sin cabeceras de extensión. DNS-over-TCP desde el cliente, fragmentos, DoT/DoH, atribución por UID y tráfico IP ajeno a DNS no están cubiertos. No activar como VPN general ni retirar Firestack en FirewallDNS con esta evidencia.
