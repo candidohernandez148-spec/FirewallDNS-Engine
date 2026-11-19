@@ -31,14 +31,14 @@ internal object Ipv4UdpProbeParser {
         val versionAndIhl = packet[0].toInt() and 0xff
         val version = versionAndIhl ushr 4
         if (version != 4) {
-            return rejected("not_ipv4", length, ipVersion = version)
+            return rejected("not_ipv4", length, version = version)
         }
         if (length < 20) {
-            return rejected("truncated_ipv4_header", length, ipVersion = version)
+            return rejected("truncated_ipv4_header", length, version = version)
         }
         val headerLength = (versionAndIhl and 0x0f) * 4
         if (headerLength < 20 || headerLength > length) {
-            return rejected("invalid_ipv4_header_length", length, ipVersion = version)
+            return rejected("invalid_ipv4_header_length", length, version = version)
         }
         val totalLength = u16(packet, 2)
         if (totalLength < headerLength || totalLength > length) {
