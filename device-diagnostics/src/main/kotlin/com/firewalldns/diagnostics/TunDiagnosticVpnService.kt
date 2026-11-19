@@ -253,10 +253,20 @@ class TunDiagnosticVpnService : VpnService() {
         protectResult: Boolean?,
         protectElapsedUs: Long?,
     ) {
-        val protectJson = protectResult?.let { ",\\"protect_returned\\":$it" } ?: ""
-        val protectTimeJson = protectElapsedUs?.let { ",\\"protect_elapsed_us\\":$it" } ?: ""
-        val json = """{"format":"firewalldns-tun-diagnostic-failure-v2","stage":${json(stage)},"message":${json(message)},"vpn_active":$running,"socket_send_completed":$socketSendCompleted,"tun_bytes_read":$bytesRead,"tun_packets_read":$packetsRead,"matching_probe_packets":$matchingPackets,"warmup_packets_seen":$warmupSeen$protectJson$protectTimeJson,"personal_dns_queries_collected":false}"""
-        publishResult(json)
+        val report = JSONObject()
+            .put("format", "firewalldns-tun-diagnostic-failure-v2")
+            .put("stage", stage)
+            .put("message", message)
+            .put("vpn_active", running)
+            .put("socket_send_completed", socketSendCompleted)
+            .put("tun_bytes_read", bytesRead)
+            .put("tun_packets_read", packetsRead)
+            .put("matching_probe_packets", matchingPackets)
+            .put("warmup_packets_seen", warmupSeen)
+            .put("personal_dns_queries_collected", false)
+        protectResult?.let { report.put("protect_returned", it) }
+        protectElapsedUs?.let { report.put("protect_elapsed_us", it) }
+        publishResult(report.toString())
     }
 
     private fun publishResult(json: String) {
