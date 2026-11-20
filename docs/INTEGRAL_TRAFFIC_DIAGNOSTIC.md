@@ -29,7 +29,7 @@ La clasificación no es excluyente entre capas: un paquete se describe simultán
 - El puerto TCP 443 por sí solo nunca se etiqueta HTTPS.
 - El puerto UDP 443 por sí solo nunca se etiqueta QUIC.
 - Un registro TLS en TCP/443 se presenta como candidato HTTPS/TLS, no como prueba del contenido HTTP.
-- TLS en TCP/853 se presenta como candidato DoT, no como DNS confirmado.
+- TLS en TCP/853 se presenta como candidato DoT, no como DNS confirmado. Si el puerto 853 no contiene una firma TLS, se etiqueta `DOT_PORT_CANDIDATE` con certeza `PORT_ONLY`; nunca `UNKNOWN_ENCRYPTED` ni DoT confirmado.
 - DNS se reconoce por puerto 53 y tamaño mínimo de cabecera; el análisis semántico de la consulta sigue perteneciendo al procesador DNS.
 - HTTP se identifica solo por firmas de métodos en texto claro.
 - No se descifra TLS, QUIC, ECH, DoH ni tráfico cifrado. DoH no puede confirmarse por el puerto 443; DoQ tampoco se afirma sin analizar el protocolo.
