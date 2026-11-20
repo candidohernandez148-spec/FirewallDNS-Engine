@@ -130,6 +130,7 @@ El módulo `:android-adapter` se valida en CI con `gradle test` y `gradle :andro
 ## Puente UDP TUN protegido en dispositivo Android
 
 - En el APK `device-diagnostics`, pulsa **Probar UDP por TUN + socket protegido** y concede el permiso VPN temporal.
+- No ejecutar mientras otra VPN esté activa: Android permite una VPN activa por perfil y la prueba debe evitar reemplazar o interrumpir la VPN que se esté usando.
 - El servicio enruta únicamente `198.18.0.1/32`, usa un eco UDP en loopback y exige `VpnService.protect()` en el socket del puente.
 - El resultado debe incluir `success: true`, un paquete recibido por TUN y una respuesta escrita al TUN. El informe identifica modelo/Android y confirma que no se usó red pública ni se interceptó DNS.
 - Repetir en Samsung Galaxy A34 5G con Wi-Fi y datos móviles activos; guardar cada JSON por separado.
