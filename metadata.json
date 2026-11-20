@@ -1,0 +1,5 @@
+{
+  "name": "FirewallDNS-Engine",
+  "description": "Local deterministic DNS filtering engine, threat reputation analyzer, policy simulator, packet classifier, and network diagnostic console.",
+  "requestFramePermissions": []
+}
