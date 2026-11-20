@@ -59,8 +59,9 @@
 - [x] Arnés host-side smoltcp TCP en IPv4: handshake cliente/servidor por colas TUN virtuales acotadas y entrega de frames DNS divididos/concatenados como stream; no conecta aún el decoder/políticas ni Android.
 
 - [x] Arnés host-side de ciclo de vida TCP smoltcp: pérdida inducida del primer SYN, retransmisión, FIN ordenado y aborto con RST (PR #26, CI verde).
-- [ ] Arnés host-side IPv6 TCP DNS smoltcp: handshake e intercambio bidireccional con framing DNS; no implica integración Android ni producción.
-- [ ] Integrar el decoder DNS TCP incremental y el motor de políticas dentro de sockets smoltcp por flujo.
+- [x] Arnés host-side IPv6 TCP DNS smoltcp: handshake e intercambio bidireccional con framing DNS (PR #27, CI verde); no implica integración Android ni producción.
+- [x] Añadir procesador DNS TCP por sesión que conecta el decoder incremental con BLOCK/OBSERVE/ALLOW y upstream, con límites de buffer/trabajo y cierre ante errores (PR de sesión DNS TCP); aún no está conectado a sockets smoltcp.
+- [ ] Conectar una instancia del procesador a cada socket TCP smoltcp y validar ACK/ventanas/retransmisión/cierre bajo carga.
 - [ ] DNS-over-TCP del lado del cliente en Android, fragmentación IP, cabeceras de extensión IPv6, MTU/fragmentación y demás protocolos mediante stack probado.
 - [ ] Integrar el plano de datos en FirewallDNS solo después de completar cobertura, pruebas de fuga/bucle y comparación de rendimiento.
 - Validar protect(), ausencia de bucles y DNS leaks.
