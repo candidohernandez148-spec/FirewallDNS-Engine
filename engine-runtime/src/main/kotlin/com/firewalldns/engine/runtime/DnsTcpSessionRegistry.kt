@@ -77,16 +77,17 @@ class DnsTcpSessionRegistry(
 
     /** Copies and queues an ordered TCP receive chunk without doing DNS or network work here. */
     fun offer(sessionId: Long, bytes: ByteArray, length: Int = bytes.size): OfferResult {
-        val entry = synchronized(lock) { if (closed) null else sessions[sessionId] }
-            ?: return OfferResult.MissingSession
-
-        val result = entry.worker.offer(bytes, length)
-        if (result == DnsTcpSessionWorker.OfferResult.Accepted) {
-            entry.lastActivityNanos.set(nowNanos())
-        } else {
-            removeEntry(sessionId, entry)
+        return synchronized(lock) {
+            if (closed) return@synchronized OfferResult.MissingSession
+            val entry = sessions[sessionId] ?: return@synchronized OfferResult.MissingSession
+            val result = entry.worker.offer(bytes, length)
+            if (result == DnsTcpSessionWorker.OfferResult.Accepted) {
+                entry.lastActivityNanos.set(nowNanos())
+            } else if (sessions[sessionId] === entry) {
+                sessions.remove(sessionId)
+            }
+            OfferResult.WorkerResult(result)
         }
-        return OfferResult.WorkerResult(result)
     }
 
     /** Called only by the TCP socket owner; returned frames remain in FIFO order. */
@@ -129,10 +130,10 @@ class DnsTcpSessionRegistry(
     }
 
     private fun removeEntry(sessionId: Long, expected: Entry) {
-        val removed = synchronized(lock) {
-            if (sessions[sessionId] === expected) sessions.remove(sessionId) else null
-        }
         // The worker is already terminal when this method is called.
+        synchronized(lock) {
+            if (sessions[sessionId] === expected) sessions.remove(sessionId)
+        }
     }
 
     private fun removeClosedLocked() {
