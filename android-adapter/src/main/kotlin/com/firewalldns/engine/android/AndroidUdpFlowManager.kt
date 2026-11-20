@@ -103,10 +103,13 @@ class AndroidUdpFlowManager(
 
     override fun close() {
         if (!closed.compareAndSet(false, true)) return
+        // Flow workers remove themselves from the registry in finally. Use the
+        // same lock for snapshot/removal so close() cannot race a weakly
+        // consistent ConcurrentHashMap traversal while capacity is released.
         val snapshot = synchronized(lock) { flows.values.toList() }
         snapshot.forEach { it.close() }
         executor.shutdownNow()
-        flows.clear()
+        synchronized(lock) { flows.clear() }
     }
 
     private inner class Flow(
@@ -198,7 +201,7 @@ class AndroidUdpFlowManager(
                     outboundBytes = 0
                 }
                 closeSocket()
-                flows.remove(id, this)
+                synchronized(lock) { flows.remove(id, this) }
             }
         }
 
