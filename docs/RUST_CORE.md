@@ -85,3 +85,10 @@ Se añade `AndroidUdpTunBridge` junto con `UdpTunPacketCodec`. El puente acepta 
 El APK `device-diagnostics` incorpora `UdpTunBridgeDiagnosticService`: crea un TUN con una única ruta sintética (`198.18.0.1/32`), envía un datagrama de prueba desde el propio dispositivo, lo transporta mediante un socket protegido hacia un eco UDP de loopback y espera la respuesta reconstruida por el TUN. No usa Internet público, no captura consultas DNS, no modifica el servicio VPN productivo y no activa el puente en FirewallDNS.
 
 Esta prueba es el primer recorrido Android real del contrato UDP TUN/protección de sockets, pero **todavía no conecta el procesamiento de paquetes a smoltcp ni al motor Rust**. El puente actual es Kotlin experimental; la migración del parser/ciclo de paquetes a Rust debe mantener paridad de paquetes y pasar las mismas pruebas antes de retirar el adaptador Kotlin. No se afirma compatibilidad con fragmentación, IPv6 extension headers, ICMP, TCP, ni tráfico UDP general en producción.
+
+
+## Expiración de flujos UDP inactivos
+
+`AndroidUdpFlowManager` aplica un timeout de inactividad monotónico y configurable (60 s por defecto, acotado a 300 s). Si no se envían ni reciben datagramas durante ese periodo, notifica `onIdleTimeout()`, cierra el socket y libera el worker y la plaza del límite de flujos. `AndroidUdpTunBridge` elimina también la asociación correspondiente para que un paquete posterior pueda crear un flujo nuevo. El callback de expiración no cambia la ruta DNS ni activa forwarding productivo.
+
+La expiración se comprueba después de los timeouts de recepción acotados; no requiere un hilo global de temporización. Las pruebas JVM verifican notificación, eliminación del flujo y recuperación de capacidad. Sigue siendo un componente experimental y no valida transporte smoltcp/TCP ni conectividad UDP pública.
