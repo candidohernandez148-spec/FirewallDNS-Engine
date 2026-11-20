@@ -44,6 +44,7 @@ class EngineTunVpnService : VpnService() {
     private val responseWriteFailed = AtomicLong()
     private val stoppedBeforeResponse = AtomicLong()
     private val responsesOut = AtomicLong()
+    private val diagnosticMetrics = FirewallDnsDiagnosticMetrics()
 
     private fun droppedCount(): Long =
         processorNoResponse.get() + processorFailed.get() + queueRejected.get() +
@@ -70,6 +71,7 @@ class EngineTunVpnService : VpnService() {
         responseWriteFailed.set(0)
         stoppedBeforeResponse.set(0)
         responsesOut.set(0)
+        diagnosticMetrics.reset()
         startForeground(NOTIFICATION_ID, notification())
         try {
             val descriptor = Builder()
@@ -135,6 +137,9 @@ class EngineTunVpnService : VpnService() {
                         if (length < 0) break
                         if (length == 0) continue
                         packetsIn.incrementAndGet()
+                        // Classify every packet delivered by this TUN before queue admission,
+                        // so saturation is visible in the same protocol report.
+                        diagnosticMetrics.record(buffer, length)
                         val packet = buffer.copyOf(length)
                         try {
                             pool.execute {
@@ -211,6 +216,7 @@ class EngineTunVpnService : VpnService() {
                 .putExtra("observed", metrics?.observed ?: 0L)
                 .putExtra("allowed", metrics?.allowed ?: 0L)
                 .putExtra("rejected", metrics?.rejected ?: 0L)
+                .putExtra("traffic_classification", diagnosticMetrics.snapshotJson())
                 .putExtra("updated_at_elapsed_ms", android.os.SystemClock.elapsedRealtime()),
         )
     }
