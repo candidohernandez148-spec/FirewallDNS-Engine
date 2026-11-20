@@ -168,6 +168,12 @@ El módulo `:android-adapter` se valida en CI con `gradle test` y `gradle :andro
 - Esta prueba verifica ciclo de vida del socket/worker en JVM, no temporización de red móvil, TUN real ni reenvío general.
 
 
+## Registro JVM de sesiones DNS/TCP
+
+- `DnsTcpSessionRegistryTest` valida el máximo global de sesiones, rechazo de identificadores duplicados, liberación de capacidad al cerrar, encolado/drenaje de respuestas, expiración por reloj monotónico y cierre idempotente.
+- La expiración se invoca desde el ciclo de mantenimiento del propietario del transporte; el registro no crea temporizadores.
+- Estas pruebas validan la capa de ciclo de vida JVM. No prueban sockets smoltcp, ACK/SEQ, retransmisiones, JNI, TUN, `VpnService.protect()` ni el servicio VPN productivo.
+
 ## Arnés TCP DNS smoltcp (host-side)
 
 - `smoltcp_tcp_dns.rs` crea dos interfaces IPv4 smoltcp con dispositivos TUN virtuales acotados y ejecuta un handshake TCP completo entre un cliente y un listener en el puerto 53.
