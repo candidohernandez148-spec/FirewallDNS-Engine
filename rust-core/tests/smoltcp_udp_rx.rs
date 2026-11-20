@@ -74,8 +74,8 @@ fn inbound_udp_packet_reaches_matching_smoltcp_socket_from_tun_rx() {
         .expect("smoltcp should deliver inbound datagram to bound socket");
     assert_eq!(&received[..length], payload);
     assert_eq!(length, payload.len());
-    assert_eq!(endpoint.port, 443);
-    assert_eq!(endpoint.addr, IpAddress::Ipv4(Ipv4Address::new(10, 77, 0, 3)));
+    assert_eq!(endpoint.endpoint.port, 443);
+    assert_eq!(endpoint.endpoint.addr, IpAddress::Ipv4(Ipv4Address::new(10, 77, 0, 3)));
     assert_eq!(device.queued_rx(), 0);
     assert_eq!(device.queued_rx_bytes(), 0);
 }
