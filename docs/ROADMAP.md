@@ -79,7 +79,7 @@ No integrar ni retirar el transporte actual hasta demostrar compatibilidad funci
 - [x] Definir una sola herramienta de diagnóstico y sus límites de cobertura.
 - [x] Añadir clasificador pasivo por capas para IPv4/IPv6, TCP/UDP/ICMP y firmas DNS/HTTP/TLS/QUIC.
 - [x] Separar certeza CONFIRMED/LIKELY/PORT_ONLY/UNKNOWN para evitar falsos positivos por número de puerto.
-- [ ] Integrar clasificación y contadores en tiempo real en el informe JSON unificado.
+- [x] Integrar clasificación de cada paquete recibido por el TUN y contadores agregados en el informe JSON unificado v3 (cobertura limitada a las rutas DNS virtuales actuales).
 - [ ] Implementar seguimiento de flujos con límites estrictos de memoria/TTL y causas de cierre.
 - [ ] Implementar atribución UID/paquete solo cuando Android lo permita, con redacción por defecto.
 - [ ] Implementar captura full-tunnel únicamente junto con reenvío TCP/UDP funcional y protección obligatoria de sockets.
