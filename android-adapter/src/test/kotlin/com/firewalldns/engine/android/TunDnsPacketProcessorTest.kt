@@ -79,6 +79,32 @@ class TunDnsPacketProcessorTest {
         assertEquals(3, u16(result!!, 30) and 0x000f)
     }
 
+    @Test fun reportsPreciseReasonsForUnsupportedPackets() {
+        val processor = TunDnsPacketProcessor(EngineRuntime()) { DnsUpstreamResult.Failure("unused") }
+        val query = query("unsupported.example")
+        val tcp = ipv4Packet(query).also { it[9] = 6 }
+        val fragment = ipv4Packet(query).also { it[6] = 0x20 }
+        val nonDns = ipv4Packet(query).also { put16(it, 22, 443) }
+        assertEquals("unsupported_transport_tcp", (processor.processDetailed(tcp) as TunDnsPacketProcessor.PacketResult.NoResponse).reason)
+        assertEquals("ipv4_fragment_unsupported", (processor.processDetailed(fragment) as TunDnsPacketProcessor.PacketResult.NoResponse).reason)
+        assertEquals("non_dns_udp_packet", (processor.processDetailed(nonDns) as TunDnsPacketProcessor.PacketResult.NoResponse).reason)
+        assertEquals("unsupported_ip_version", (processor.processDetailed(byteArrayOf(0x10)) as TunDnsPacketProcessor.PacketResult.NoResponse).reason)
+    }
+
+    @Test fun reportsUpstreamFailureWhenItReturnsServfail() {
+        val query = query("temporary.example")
+        val processor = TunDnsPacketProcessor(EngineRuntime()) { DnsUpstreamResult.Failure("offline") }
+        val result = processor.processDetailed(ipv4Packet(query))
+        assertEquals("upstream_failure_servfail", (result as TunDnsPacketProcessor.PacketResult.Response).outcome)
+    }
+
+    @Test fun reportsUpstreamCancellationWithoutFabricatingResponse() {
+        val query = query("cancelled.example")
+        val processor = TunDnsPacketProcessor(EngineRuntime()) { DnsUpstreamResult.Cancelled }
+        val result = processor.processDetailed(ipv4Packet(query))
+        assertEquals("upstream_cancelled", (result as TunDnsPacketProcessor.PacketResult.NoResponse).reason)
+    }
+
     @Test fun rejectsTcpAndFragmentedPacketsInsteadOfMisparsingThem() {
         val query = query("unsupported.example")
         val tcp = ipv4Packet(query).also { it[9] = 6 }
