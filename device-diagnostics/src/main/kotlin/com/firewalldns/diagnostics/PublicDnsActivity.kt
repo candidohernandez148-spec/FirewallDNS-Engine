@@ -86,6 +86,20 @@ class PublicDnsActivity : Activity() {
     "application_identity_enabled": false
   },
   "traffic_classification": $trafficClassification,
+  "capabilities": {
+    "packet_classification": true,
+    "tcp_udp_general_capture": false,
+    "tcp_forwarding": false,
+    "udp_forwarding": false,
+    "flow_tracking": false,
+    "application_uid_attribution": false,
+    "icmp_forwarding": false,
+    "fragment_reassembly": false,
+    "tls_decryption": false,
+    "doh_dot_semantic_inspection": false,
+    "cpu_memory_battery_metrics": false,
+    "unsupported_reason": "The current diagnostic VPN routes only virtual DNS endpoints; general forwarding is intentionally disabled until a tested transport plane is available."
+  },
   "metrics": {
     "packets_in": $packets,
     "dns_processed": $processed,
