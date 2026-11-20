@@ -154,3 +154,9 @@ El módulo `:android-adapter` se valida en CI con `gradle test` y `gradle :andro
 - `by_processing_outcome` distingue respuesta escrita, excepción, rechazo de cola, fallo de escritura, cierre y clases de paquetes no procesables. La API DNS actual aún agrupa rechazo DNS, cancelación y fallo de codificación en una causa común; no afirmar una causa más precisa sin ampliar el contrato del procesador.
 - `coverage` declara rutas DNS virtuales `/32` y `/128`, sin rutas por defecto, sin captura integral, sin tracking de flujos y sin identidad de aplicación. El servicio no habilita TCP/UDP forwarding general.
 - La prueba unitaria valida el agregador y el CI compila el APK; solo una prueba en Samsung A34 5G confirma qué protocolos llegan realmente al TUN. No interpretar ausencia de TCP en el informe como ausencia de TCP en el teléfono.
+
+
+### Expiración de flujos UDP
+- `AndroidUdpFlowManagerTest.expiresIdleFlowsAndReleasesTheirCapacity` usa loopback y un timeout corto para comprobar que un flujo sin tráfico notifica expiración, se elimina del gestor y libera su plaza para abrir otro flujo.
+- El timeout de producción predeterminado es 60 s y usa `System.nanoTime()`; el tiempo de pared no afecta la caducidad.
+- Esta prueba verifica ciclo de vida del socket/worker en JVM, no temporización de red móvil, TUN real ni reenvío general.
