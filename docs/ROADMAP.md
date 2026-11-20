@@ -58,8 +58,10 @@
 - [x] Preflight unificado IPv4/IPv6 TCP+UDP en Rust: longitudes, checksums, Data Offset, rechazo de fragmentos/extensiones no soportadas; API pura con pruebas host-side, todavía fuera de JNI y producción.
 - [x] Arnés host-side smoltcp TCP en IPv4: handshake cliente/servidor por colas TUN virtuales acotadas y entrega de frames DNS divididos/concatenados como stream; no conecta aún el decoder/políticas ni Android.
 
-- [ ] Arnés host-side de ciclo de vida TCP smoltcp: pérdida inducida del primer SYN, retransmisión, FIN ordenado y aborto con RST; validar en CI antes de usarlo como gate de integración.
-- [ ] DNS-over-TCP del lado del cliente, fragmentación IP, cabeceras de extensión IPv6, MTU/fragmentación y demás protocolos mediante stack probado.
+- [x] Arnés host-side de ciclo de vida TCP smoltcp: pérdida inducida del primer SYN, retransmisión, FIN ordenado y aborto con RST (PR #26, CI verde).
+- [ ] Arnés host-side IPv6 TCP DNS smoltcp: handshake e intercambio bidireccional con framing DNS; no implica integración Android ni producción.
+- [ ] Integrar el decoder DNS TCP incremental y el motor de políticas dentro de sockets smoltcp por flujo.
+- [ ] DNS-over-TCP del lado del cliente en Android, fragmentación IP, cabeceras de extensión IPv6, MTU/fragmentación y demás protocolos mediante stack probado.
 - [ ] Integrar el plano de datos en FirewallDNS solo después de completar cobertura, pruebas de fuga/bucle y comparación de rendimiento.
 - Validar protect(), ausencia de bucles y DNS leaks.
 
