@@ -41,15 +41,17 @@ class AndroidUdpFlowManager(
     maxFlows: Int = DEFAULT_MAX_FLOWS,
     maxQueuedDatagramsPerFlow: Int = DEFAULT_QUEUE_CAPACITY,
     maxDatagramBytes: Int = DEFAULT_MAX_DATAGRAM_BYTES,
+    maxQueuedBytesPerFlow: Int = DEFAULT_MAX_QUEUED_BYTES_PER_FLOW,
     receivePollTimeoutMillis: Int = DEFAULT_RECEIVE_POLL_TIMEOUT_MILLIS,
 ) : AutoCloseable {
     private val flowLimit = maxFlows.also { require(it in 1..MAX_ALLOWED_FLOWS) }
     private val queueLimit = maxQueuedDatagramsPerFlow.also { require(it in 1..MAX_ALLOWED_QUEUE_CAPACITY) }
     private val datagramLimit = maxDatagramBytes.also { require(it in 1..MAX_ALLOWED_DATAGRAM_BYTES) }
+    private val byteQueueLimit = maxQueuedBytesPerFlow.also { require(it in datagramLimit..MAX_ALLOWED_QUEUED_BYTES_PER_FLOW) }
     private val pollTimeout = receivePollTimeoutMillis.also { require(it in 10..1_000) }
 
     init {
-        require(flowLimit.toLong() * queueLimit.toLong() * datagramLimit.toLong() <= MAX_QUEUED_BYTES) {
+        require(flowLimit.toLong() * byteQueueLimit.toLong() <= MAX_QUEUED_BYTES) {
             "firewalldns_udp_queue_memory_limit_exceeded"
         }
     }
@@ -109,24 +111,36 @@ class AndroidUdpFlowManager(
     ) : AndroidUdpFlow, Runnable {
         private val active = AtomicBoolean(true)
         private val outbound = ArrayBlockingQueue<ByteArray>(queueLimit)
+        private val outboundLock = Any()
+        private var outboundBytes = 0
+
+        val queuedOutboundBytes: Int get() = synchronized(outboundLock) { outboundBytes }
 
         override fun send(datagram: ByteArray): Boolean {
             if (datagram.isEmpty() || datagram.size > datagramLimit || !active.get()) {
                 rejected.incrementAndGet()
                 return false
             }
-            val accepted = outbound.offer(datagram.copyOf())
-            if (!accepted || !active.get()) {
-                rejected.incrementAndGet()
-                if (!active.get()) outbound.clear()
-                return false
+            synchronized(outboundLock) {
+                if (!active.get() || outbound.size >= queueLimit || datagram.size > byteQueueLimit - outboundBytes) {
+                    rejected.incrementAndGet()
+                    return false
+                }
+                if (!outbound.offer(datagram.copyOf())) {
+                    rejected.incrementAndGet()
+                    return false
+                }
+                outboundBytes += datagram.size
+                return true
             }
-            return true
         }
 
         override fun close() {
             if (!active.compareAndSet(true, false)) return
-            outbound.clear()
+            synchronized(outboundLock) {
+                outbound.clear()
+                outboundBytes = 0
+            }
             closeSocket()
         }
 
@@ -139,7 +153,9 @@ class AndroidUdpFlowManager(
             try {
                 while (active.get() && !closed.get()) {
                     while (true) {
-                        val pending = outbound.poll() ?: break
+                        val pending = synchronized(outboundLock) {
+                            outbound.poll()?.also { outboundBytes = (outboundBytes - it.size).coerceAtLeast(0) }
+                        } ?: break
                         socket.send(DatagramPacket(pending, pending.size))
                         sent.incrementAndGet()
                     }
@@ -167,7 +183,10 @@ class AndroidUdpFlowManager(
                 }
             } finally {
                 active.set(false)
-                outbound.clear()
+                synchronized(outboundLock) {
+                    outbound.clear()
+                    outboundBytes = 0
+                }
                 closeSocket()
                 flows.remove(id, this)
             }
@@ -190,6 +209,8 @@ class AndroidUdpFlowManager(
         const val DEFAULT_MAX_DATAGRAM_BYTES = 1_500
         const val MAX_ALLOWED_DATAGRAM_BYTES = 65_507
         const val MAX_QUEUED_BYTES = 16L * 1024L * 1024L
+        const val DEFAULT_MAX_QUEUED_BYTES_PER_FLOW = 256 * 1024
+        const val MAX_ALLOWED_QUEUED_BYTES_PER_FLOW = 256 * 1024
         const val DEFAULT_RECEIVE_POLL_TIMEOUT_MILLIS = 100
         const val MIN_RECEIVE_BUFFER_BYTES = 512
     }
