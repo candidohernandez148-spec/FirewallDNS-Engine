@@ -119,3 +119,10 @@ El módulo `:android-adapter` se valida en CI con `gradle test` y `gradle :andro
 - CI compila libfirewalldns_native.so para arm64-v8a con cargo-ndk y la empaqueta en android-adapter/jniLibs antes de ensamblar los artefactos Android.
 - NativePacketCoreInstrumentedTest confirma en un dispositivo/emulador ARM64 que la biblioteca se carga mediante JNI y rechaza un paquete truncado.
 - Esta prueba confirma carga e invocación, no rendimiento ni paridad completa. Antes de usar Rust en la ruta TUN se requiere un benchmark A/B Kotlin/Rust con fixtures idénticos, throughput, P50/P95/P99, CPU, memoria y consumo en el Samsung A34 5G.
+
+
+## Arnés UDP de ida y vuelta smoltcp (host-side)
+
+- `smoltcp_udp_roundtrip.rs` verifica un ciclo completo de laboratorio: socket UDP smoltcp → paquete IP en cola TX → socket UDP loopback del host → respuesta encapsulada → cola RX → socket smoltcp.
+- Comprueba payload, puertos, endpoint remoto y liberación de bytes RX. La prueba usa loopback local y no necesita acceso a Internet.
+- No prueba el socket Android protegido, `VpnService.protect()`, TUN real, JNI, IPv6 ni ausencia de bucles/fugas. No habilita la pila en producción.
