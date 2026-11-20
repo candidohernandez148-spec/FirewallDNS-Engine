@@ -71,6 +71,37 @@ class DnsTcpSessionProcessorTest {
     }
 
     @Test
+    fun observeDecisionStillForwardsToUpstream() {
+        val query = query("analytics.example")
+        var upstreamCalls = 0
+        val runtime = EngineRuntime(
+            initialRules = listOf(
+                PolicyRule(
+                    id = "observe-analytics",
+                    domain = "analytics.example",
+                    action = PolicyAction.OBSERVE,
+                    source = RuleSource.MANAGED,
+                    reason = "tracking_observed",
+                ),
+            ),
+        )
+        val processor = DnsTcpSessionProcessor(
+            engine = runtime,
+            exchangeUpstream = {
+                upstreamCalls++
+                DnsUpstreamResult.Success(DnsUpstreamResponse(response(query), DnsUpstreamTransport.UDP))
+            },
+        )
+
+        val result = assertIs<DnsTcpSessionProcessor.Result.Batch>(
+            processor.accept(DnsTcpFrameCodec.encode(query)),
+        )
+        assertEquals(1, upstreamCalls)
+        assertEquals(1, result.framedResponses.size)
+        assertEquals(1L, runtime.metrics().observed)
+    }
+
+    @Test
     fun coalescedMessagesAreBoundedAndCanBeDrainedInBatches() {
         val queries = listOf(query("one.example"), query("two.example"), query("three.example"))
         val processor = DnsTcpSessionProcessor(
