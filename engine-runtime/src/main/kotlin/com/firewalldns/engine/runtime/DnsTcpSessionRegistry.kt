@@ -25,6 +25,7 @@ class DnsTcpSessionRegistry(
         data object Opened : OpenResult
         data object AlreadyExists : OpenResult
         data object CapacityReached : OpenResult
+        data object Closed : OpenResult
     }
 
     sealed interface OfferResult {
@@ -59,7 +60,7 @@ class DnsTcpSessionRegistry(
     /** Creates a worker for a newly established TCP flow. Duplicate ids are rejected. */
     fun openSession(sessionId: Long): OpenResult {
         synchronized(lock) {
-            if (closed) return OpenResult.CapacityReached
+            if (closed) return OpenResult.Closed
             removeClosedLocked()
             if (sessions.containsKey(sessionId)) return OpenResult.AlreadyExists
             if (sessions.size >= maxSessions) return OpenResult.CapacityReached
@@ -83,7 +84,7 @@ class DnsTcpSessionRegistry(
         if (result == DnsTcpSessionWorker.OfferResult.Accepted) {
             entry.lastActivityNanos.set(nowNanos())
         } else {
-            removeEntry(sessionId, entry, closeWorker = false)
+            removeEntry(sessionId, entry)
         }
         return OfferResult.WorkerResult(result)
     }
@@ -127,11 +128,11 @@ class DnsTcpSessionRegistry(
         workers.forEach(DnsTcpSessionWorker::close)
     }
 
-    private fun removeEntry(sessionId: Long, expected: Entry, closeWorker: Boolean) {
+    private fun removeEntry(sessionId: Long, expected: Entry) {
         val removed = synchronized(lock) {
             if (sessions[sessionId] === expected) sessions.remove(sessionId) else null
         }
-        if (closeWorker) removed?.worker?.close()
+        // The worker is already terminal when this method is called.
     }
 
     private fun removeClosedLocked() {
