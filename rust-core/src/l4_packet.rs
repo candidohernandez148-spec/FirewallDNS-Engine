@@ -253,7 +253,7 @@ mod tests {
         }
         packet[l4 + l4_len..].copy_from_slice(payload);
 
-        if protocol == IPPROTO_TCP || ipv6 {
+        {
             let source = if ipv6 {
                 IpAddr::V6(Ipv6Addr::from(<[u8; 16]>::try_from(&packet[8..24]).unwrap()))
             } else {
@@ -265,8 +265,8 @@ mod tests {
                 IpAddr::V4(Ipv4Addr::from(<[u8; 4]>::try_from(&packet[16..20]).unwrap()))
             };
             let value = transport_checksum(ipv6, &packet[l4..], source, destination, protocol);
-            packet[l4 + if protocol == IPPROTO_TCP { 16 } else { 6 }..l4 + if protocol == IPPROTO_TCP { 18 } else { 8 }]
-                .copy_from_slice(&value.to_be_bytes());
+            let checksum_offset = l4 + if protocol == IPPROTO_TCP { 16 } else { 6 };
+            packet[checksum_offset..checksum_offset + 2].copy_from_slice(&value.to_be_bytes());
         }
         if !ipv6 {
             let value = checksum(&packet[..20]);
@@ -345,7 +345,8 @@ mod tests {
         );
 
         let mut short = make_packet(false, IPPROTO_TCP, &[]);
-        short[2..4].copy_from_slice(&((short.len() - 1) as u16).to_be_bytes());
+        let declared_len = (short.len() - 1) as u16;
+        short[2..4].copy_from_slice(&declared_len.to_be_bytes());
         assert_eq!(
             validate_tun_l4_packet(&short),
             Err(PacketValidationResult::InvalidIpLength)
