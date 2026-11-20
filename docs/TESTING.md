@@ -126,3 +126,11 @@ El módulo `:android-adapter` se valida en CI con `gradle test` y `gradle :andro
 - `smoltcp_udp_roundtrip.rs` verifica un ciclo completo de laboratorio: socket UDP smoltcp → paquete IP en cola TX → socket UDP loopback del host → respuesta encapsulada → cola RX → socket smoltcp.
 - Comprueba payload, puertos, endpoint remoto y liberación de bytes RX. La prueba usa loopback local y no necesita acceso a Internet.
 - No prueba el socket Android protegido, `VpnService.protect()`, TUN real, JNI, IPv6 ni ausencia de bucles/fugas. No habilita la pila en producción.
+
+## Puente UDP TUN protegido en dispositivo Android
+
+- En el APK `device-diagnostics`, pulsa **Probar UDP por TUN + socket protegido** y concede el permiso VPN temporal.
+- El servicio enruta únicamente `198.18.0.1/32`, usa un eco UDP en loopback y exige `VpnService.protect()` en el socket del puente.
+- El resultado debe incluir `success: true`, un paquete recibido por TUN y una respuesta escrita al TUN. El informe identifica modelo/Android y confirma que no se usó red pública ni se interceptó DNS.
+- Repetir en Samsung Galaxy A34 5G con Wi-Fi y datos móviles activos; guardar cada JSON por separado.
+- La prueba valida el camino Android TUN/socket protegido/reinyección UDP local, no conectividad UDP a Internet, smoltcp, TCP, fragmentación, IPv6 end-to-end, rendimiento de radio ni ausencia general de fugas.
