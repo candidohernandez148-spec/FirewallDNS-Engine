@@ -99,3 +99,10 @@ La expiración se comprueba después de los timeouts de recepción acotados; no 
 Se añade `rust-core/tests/smoltcp_tcp_dns.rs`. La prueba crea dos interfaces smoltcp IPv4 conectadas mediante dos instancias de `TunPacketDevice` con límites simultáneos de paquetes y bytes. Un socket TCP cliente completa SYN/SYN-ACK/ACK contra un listener en el puerto 53; después envía dos mensajes DNS con prefijo de longitud de dos bytes, dividiendo el primer prefijo/cuerpo entre escrituras y concatenando el segundo mensaje en el mismo stream. El servidor recibe el flujo TCP ordenado y se comprueba que los bytes coinciden exactamente con los dos frames esperados.
 
 La prueba demuestra únicamente **handshake TCP, transporte de stream, y movimiento RX/TX a través del dispositivo virtual smoltcp** en host. No interpreta las consultas DNS, no llama a `EngineRuntime`, no abre upstream, no crea JNI persistente, no usa Android `VpnService.protect()` ni un descriptor TUN real. Tampoco valida IPv6, retransmisiones bajo pérdida inducida, límites de concurrencia de sockets ni cierre/reinicio de servicio. No se habilita TCP/53 en FirewallDNS. La siguiente puerta es incorporar límites y ciclo de vida explícitos de sockets TCP, probar timeouts/cierre/reset y conectar el frame completo al decoder DNS y al mismo motor de políticas antes de cualquier adaptador Android.
+
+
+## Ciclo de vida TCP smoltcp (laboratorio host-side)
+
+Se añade `rust-core/tests/smoltcp_tcp_lifecycle.rs` para probar tres comportamientos del stack: retransmisión del SYN tras descartar el primer paquete, cierre ordenado FIN con observación del cierre por el peer, y aborto local con RST que libera el socket remoto. Los tests utilizan dos interfaces smoltcp IPv4 y `TunPacketDevice` con límites de paquetes/bytes; no utilizan sockets del host ni Android.
+
+Esta cobertura es un gate de laboratorio, no una implementación del gestor de conexiones de producción. No demuestra comportamiento bajo pérdida sostenida, límites de concurrencia, IPv6, temporización de radio, `VpnService.protect()`, TUN Android, JNI persistente, upstream ni DNS parser/policies. No habilita TCP/53 en el servicio VPN actual.
