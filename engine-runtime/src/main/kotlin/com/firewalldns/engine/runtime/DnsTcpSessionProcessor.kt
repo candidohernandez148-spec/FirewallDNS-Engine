@@ -65,7 +65,7 @@ class DnsTcpSessionProcessor(
         var processed = 0
         while (processed < maxFramesPerBatch) {
             when (val frame = decoder.pollFrame()) {
-                DnsTcpFrameDecode.Incomplete -> return Result.Batch(responses, decoder.bufferedBytes > 0)
+                DnsTcpFrameDecode.Incomplete -> return Result.Batch(responses, decoder.hasCompleteFrame)
                 is DnsTcpFrameDecode.Invalid -> return closeWith(frame.reason)
                 is DnsTcpFrameDecode.Complete -> {
                     val response = evaluate(frame.message) ?: return Result.Closed(closedReason!!)
@@ -78,7 +78,7 @@ class DnsTcpSessionProcessor(
                 }
             }
         }
-        return Result.Batch(responses, decoder.bufferedBytes > 0)
+        return Result.Batch(responses, decoder.hasCompleteFrame)
     }
 
     /** Permanently closes this logical session and clears buffered query bytes. */
