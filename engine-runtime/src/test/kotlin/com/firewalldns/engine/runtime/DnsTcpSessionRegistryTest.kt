@@ -87,7 +87,7 @@ class DnsTcpSessionRegistryTest {
         registry.close()
 
         assertEquals(0, registry.activeSessionCount)
-        assertEquals(DnsTcpSessionRegistry.OpenResult.CapacityReached, registry.openSession(2))
+        assertEquals(DnsTcpSessionRegistry.OpenResult.Closed, registry.openSession(2))
     }
 
     private fun registry(
