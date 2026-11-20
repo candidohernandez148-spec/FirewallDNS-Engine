@@ -37,6 +37,7 @@ engine-core, dns-engine, threat-engine, engine-monitor y engine-runtime. app-ide
 - [Plan de sustitución e integración](docs/INTEGRATION_PLAN.md)
 - [Hoja de ruta](docs/ROADMAP.md)
 - [Estrategia de pruebas](docs/TESTING.md)
+- [Registro de sesiones DNS/TCP](docs/DNS_TCP_SESSION_REGISTRY.md)
 - [Seguridad y privacidad](docs/SECURITY.md)
 - [Instrucciones para agentes](AGENTS.md)
 
