@@ -11,9 +11,10 @@ import java.util.concurrent.atomic.AtomicInteger
  * it never performs DNS policy evaluation or upstream network I/O.
  *
  * The host must call [close] when the TCP socket closes and provide
- * [cancelUpstream] that promptly closes the active protected upstream socket;\n * this callback must be non-blocking because queue overflow can invoke it from\n * the caller of [offer]. Response
- * frames are drained by the owner of the smoltcp SocketSet, never written to a
- * smoltcp socket from this worker.
+ * [cancelUpstream] that promptly closes the active protected upstream socket.
+ * This callback must be non-blocking because queue overflow can invoke it from
+ * the caller of [offer]. Response frames are drained by the owner of the
+ * smoltcp SocketSet, never written to a smoltcp socket from this worker.
  */
 class DnsTcpSessionWorker(
     private val processor: DnsTcpSessionProcessor,
@@ -69,8 +70,9 @@ class DnsTcpSessionWorker(
         synchronized(inputLock) {
             terminalReason?.let { return OfferResult.Closed(it) }
             if (closed.get()) return OfferResult.Closed(terminalReason ?: "dns_tcp_worker_closed")
-            val nextBytes = inputBytes.get() + length
-            if (nextBytes < inputBytes.get() || nextBytes > maxQueuedInputBytes) {
+            val currentBytes = inputBytes.get()
+            val nextBytes = currentBytes + length
+            if (nextBytes < currentBytes || nextBytes > maxQueuedInputBytes) {
                 closeLocked("dns_tcp_worker_input_limit_exceeded")
                 return OfferResult.Closed(terminalReason!!)
             }
@@ -134,11 +136,16 @@ class DnsTcpSessionWorker(
                 } catch (_: InterruptedException) {
                     break
                 }
-                synchronized(inputLock) {
-                    if (closed.get()) break
-                    inputBytes.addAndGet(-chunk.size)
+                val stopAfterTake = synchronized(inputLock) {
+                    if (closed.get()) {
+                        true
+                    } else {
+                        inputBytes.addAndGet(-chunk.size)
+                        false
+                    }
                 }
-                if (closed.get()) break
+                if (stopAfterTake || closed.get()) break
+
                 var result = processor.accept(chunk)
                 while (true) {
                     when (result) {
