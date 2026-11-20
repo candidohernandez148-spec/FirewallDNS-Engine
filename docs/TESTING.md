@@ -174,3 +174,10 @@ El módulo `:android-adapter` se valida en CI con `gradle test` y `gradle :andro
 - El cliente envía frames DNS con prefijo de dos bytes: el primer frame se divide entre escrituras y el segundo se concatena en el mismo stream. El servidor debe recibir exactamente el flujo ordenado, sin bytes perdidos ni añadidos.
 - Ejecutar: `cargo test --manifest-path rust-core/Cargo.toml --test smoltcp_tcp_dns`.
 - Es una prueba host-side de TCP smoltcp y de las colas virtuales; no cubre IPv6, pérdida inducida/retransmisión, timeouts, cierre/RST, sockets Android protegidos, JNI persistente, TUN real, motor de políticas ni upstream. No habilita TCP/53 en la VPN productiva.
+
+
+## Ciclo de vida TCP smoltcp (laboratorio host-side)
+
+- `smoltcp_tcp_lifecycle.rs` comprueba que smoltcp retransmite el SYN cuando se descarta deliberadamente el primer paquete, que el cierre ordenado propaga FIN al peer y permite cerrar ambos sockets, y que `abort()` produce el reset que libera el socket remoto.
+- Ejecutar: `cargo test --manifest-path rust-core/Cargo.toml --test smoltcp_tcp_lifecycle`.
+- La prueba es host-side sobre interfaces y colas TUN virtuales acotadas. No valida temporizadores bajo redes reales, IPv6, pérdida sostenida, límites de conexiones simultáneas, Android `VpnService.protect()`, JNI persistente, TUN real, upstream ni integración con el motor DNS. TCP/53 sigue deshabilitado en FirewallDNS productivo.
