@@ -142,7 +142,7 @@ object FirewallDnsTrafficClassifier {
             return result("QUIC", Certainty.CONFIRMED, "quic_long_header_signature")
         }
         if ((source == 853 || destination == 853) && transport == "TCP") {
-            return result("UNKNOWN_ENCRYPTED", Certainty.PORT_ONLY, "dot_port_without_tls_signature")
+            return result("DOT_PORT_CANDIDATE", Certainty.PORT_ONLY, "dot_port_without_tls_signature")
         }
         if ((source == 443 || destination == 443) && transport == "UDP") {
             return result("UDP_443_UNKNOWN", Certainty.PORT_ONLY, "udp_443_is_not_proof_of_quic")

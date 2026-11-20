@@ -21,25 +21,52 @@ class TunDnsPacketProcessor(
         require(maxDnsPayloadBytes in 512..4096)
     }
 
-    /** Returns a complete IP/UDP response packet, or null for unsupported/invalid input. */
-    fun process(packet: ByteArray, length: Int = packet.size): ByteArray? {
-        val request = decode(packet, length) ?: return null
+    sealed interface PacketResult {
+        data class Response(val packet: ByteArray, val outcome: String) : PacketResult
+        data class NoResponse(val reason: String) : PacketResult
+    }
+
+    /** Compatibility API. Detailed callers should use processDetailed() to retain the terminal reason. */
+    fun process(packet: ByteArray, length: Int = packet.size): ByteArray? =
+        (processDetailed(packet, length) as? PacketResult.Response)?.packet
+
+    /** Returns a payload-free terminal reason when the packet cannot be answered. */
+    fun processDetailed(packet: ByteArray, length: Int = packet.size): PacketResult {
+        val decoded = decodeDetailed(packet, length)
+        val request = when (decoded) {
+            is DecodeResult.Valid -> decoded.request
+            is DecodeResult.Invalid -> return PacketResult.NoResponse(decoded.reason)
+        }
         val evaluation = engine.evaluateDns(request.dns)
-        val response = when (evaluation) {
-            is DnsEvaluation.Blocked -> evaluation.response
-            is DnsEvaluation.Forward -> when (val upstream = exchangeUpstream(request.dns)) {
-                is DnsUpstreamResult.Success -> upstream.response.message
-                is DnsUpstreamResult.Failure -> servfail(evaluation.question)
-                DnsUpstreamResult.Cancelled -> return null
+        val response: ByteArray
+        val responseOutcome: String
+        when (evaluation) {
+            is DnsEvaluation.Blocked -> {
+                response = evaluation.response
+                responseOutcome = "dns_blocked_response"
             }
-            is DnsEvaluation.Rejected -> return null
+            is DnsEvaluation.Forward -> when (val upstream = exchangeUpstream(request.dns)) {
+                is DnsUpstreamResult.Success -> {
+                    response = upstream.response.message
+                    responseOutcome = "dns_forwarded_response"
+                }
+                is DnsUpstreamResult.Failure -> {
+                    response = servfail(evaluation.question)
+                    responseOutcome = "upstream_failure_servfail"
+                }
+                DnsUpstreamResult.Cancelled -> return PacketResult.NoResponse("upstream_cancelled")
+            }
+            is DnsEvaluation.Rejected -> return PacketResult.NoResponse("dns_rejected")
         }
-        val bounded = if (response.size > maxDnsPayloadBytes) {
-            truncated(evaluation, response)
-        } else {
-            response
-        }
-        return encodeResponse(request, bounded)
+        val bounded = if (response.size > maxDnsPayloadBytes) truncated(evaluation, response) else response
+        val encoded = encodeResponse(request, bounded)
+            ?: return PacketResult.NoResponse("response_encoding_failed")
+        return PacketResult.Response(encoded, responseOutcome)
+    }
+
+    private sealed interface DecodeResult {
+        data class Valid(val request: Request) : DecodeResult
+        data class Invalid(val reason: String) : DecodeResult
     }
 
     private data class Request(
@@ -53,60 +80,79 @@ class TunDnsPacketProcessor(
         val originalHeader: ByteArray,
     )
 
-    private fun decode(packet: ByteArray, length: Int): Request? {
-        if (length <= 0 || length > packet.size) return null
+    private fun decodeDetailed(packet: ByteArray, length: Int): DecodeResult {
+        if (length <= 0 || length > packet.size) return DecodeResult.Invalid("invalid_packet_length")
         return when ((packet[0].toInt() ushr 4) and 0x0f) {
             4 -> decodeIpv4(packet, length)
             6 -> decodeIpv6(packet, length)
-            else -> null
+            else -> DecodeResult.Invalid("unsupported_ip_version")
         }
     }
 
-    private fun decodeIpv4(packet: ByteArray, length: Int): Request? {
-        if (length < 28) return null
+    private fun decodeIpv4(packet: ByteArray, length: Int): DecodeResult {
+        if (length < 20) return DecodeResult.Invalid("ipv4_header_truncated")
         val headerLength = (packet[0].toInt() and 0x0f) * 4
-        if (headerLength < 20 || headerLength + 8 > length) return null
+        if (headerLength < 20 || headerLength > length) return DecodeResult.Invalid("ipv4_header_length_invalid")
         val totalLength = u16(packet, 2)
-        if (totalLength < headerLength + 8 || totalLength > length) return null
-        if ((packet[9].toInt() and 0xff) != IPPROTO_UDP) return null
-        if ((u16(packet, 6) and 0x3fff) != 0) return null // no fragments
-        val udpLength = u16(packet, headerLength + 4)
-        if (udpLength < 8 || headerLength + udpLength != totalLength) return null
-        val sourcePort = u16(packet, headerLength)
-        val destinationPort = u16(packet, headerLength + 2)
-        if (destinationPort != DNS_PORT || udpLength == 8) return null
-        return Request(
-            ipv6 = false,
-            ipHeaderLength = headerLength,
-            sourceAddress = packet.copyOfRange(12, 16),
-            destinationAddress = packet.copyOfRange(16, 20),
-            sourcePort = sourcePort,
-            destinationPort = destinationPort,
-            dns = packet.copyOfRange(headerLength + 8, headerLength + udpLength),
-            originalHeader = packet.copyOfRange(0, headerLength),
-        )
+        if (totalLength < headerLength || totalLength > length) return DecodeResult.Invalid("ipv4_total_length_invalid")
+        val protocol = packet[9].toInt() and 0xff
+        if (protocol != IPPROTO_UDP) {
+            return DecodeResult.Invalid(if (protocol == IPPROTO_TCP) "unsupported_transport_tcp" else "unsupported_transport_other")
+        }
+        if ((u16(packet, 6) and 0x3fff) != 0) return DecodeResult.Invalid("ipv4_fragment_unsupported")
+        if (headerLength + 8 > totalLength) return DecodeResult.Invalid("udp_header_truncated")
+        return decodeUdp(packet, length, false, headerLength, totalLength,
+            packet.copyOfRange(12, 16), packet.copyOfRange(16, 20))
     }
 
-    private fun decodeIpv6(packet: ByteArray, length: Int): Request? {
-        if (length < 48) return null
+    private fun decodeIpv6(packet: ByteArray, length: Int): DecodeResult {
+        if (length < 40) return DecodeResult.Invalid("ipv6_header_truncated")
         val payloadLength = u16(packet, 4)
-        if (payloadLength < 8 || 40 + payloadLength > length) return null
-        // Extension headers and jumbograms are intentionally rejected, not misparsed.
-        if ((packet[6].toInt() and 0xff) != IPPROTO_UDP) return null
-        val udpLength = u16(packet, 44)
-        if (udpLength < 8 || udpLength != payloadLength) return null
-        val sourcePort = u16(packet, 40)
-        val destinationPort = u16(packet, 42)
-        if (destinationPort != DNS_PORT || udpLength == 8) return null
-        return Request(
-            ipv6 = true,
-            ipHeaderLength = 40,
-            sourceAddress = packet.copyOfRange(8, 24),
-            destinationAddress = packet.copyOfRange(24, 40),
-            sourcePort = sourcePort,
-            destinationPort = destinationPort,
-            dns = packet.copyOfRange(48, 40 + udpLength),
-            originalHeader = packet.copyOfRange(0, 40),
+        if (payloadLength == 0 || 40 + payloadLength > length) return DecodeResult.Invalid("ipv6_payload_length_invalid")
+        val nextHeader = packet[6].toInt() and 0xff
+        if (nextHeader != IPPROTO_UDP) {
+            val reason = when (nextHeader) {
+                IPPROTO_TCP -> "unsupported_transport_tcp"
+                44 -> "ipv6_fragment_unsupported"
+                0, 43, 51, 60 -> "ipv6_extension_header_unsupported"
+                else -> "unsupported_transport_other"
+            }
+            return DecodeResult.Invalid(reason)
+        }
+        if (payloadLength < 8) return DecodeResult.Invalid("udp_header_truncated")
+        return decodeUdp(packet, length, true, 40, 40 + payloadLength,
+            packet.copyOfRange(8, 24), packet.copyOfRange(24, 40))
+    }
+
+    private fun decodeUdp(
+        packet: ByteArray,
+        length: Int,
+        ipv6: Boolean,
+        ipHeaderLength: Int,
+        packetEnd: Int,
+        sourceAddress: ByteArray,
+        destinationAddress: ByteArray,
+    ): DecodeResult {
+        if (ipHeaderLength + 8 > packetEnd) return DecodeResult.Invalid("udp_header_truncated")
+        val udpLength = u16(packet, ipHeaderLength + 4)
+        if (udpLength < 8 || ipHeaderLength + udpLength != packetEnd || packetEnd > length) {
+            return DecodeResult.Invalid("udp_length_invalid")
+        }
+        val sourcePort = u16(packet, ipHeaderLength)
+        val destinationPort = u16(packet, ipHeaderLength + 2)
+        if (destinationPort != DNS_PORT) return DecodeResult.Invalid("non_dns_udp_packet")
+        if (udpLength < 8 + 12) return DecodeResult.Invalid("dns_payload_too_short")
+        return DecodeResult.Valid(
+            Request(
+                ipv6 = ipv6,
+                ipHeaderLength = ipHeaderLength,
+                sourceAddress = sourceAddress,
+                destinationAddress = destinationAddress,
+                sourcePort = sourcePort,
+                destinationPort = destinationPort,
+                dns = packet.copyOfRange(ipHeaderLength + 8, ipHeaderLength + udpLength),
+                originalHeader = packet.copyOfRange(0, ipHeaderLength),
+            ),
         )
     }
 
@@ -232,5 +278,6 @@ class TunDnsPacketProcessor(
     private companion object {
         const val DNS_PORT = 53
         const val IPPROTO_UDP = 17
+        const val IPPROTO_TCP = 6
     }
 }

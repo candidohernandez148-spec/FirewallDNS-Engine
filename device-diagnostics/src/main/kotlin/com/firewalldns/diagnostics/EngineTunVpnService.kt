@@ -143,29 +143,26 @@ class EngineTunVpnService : VpnService() {
                         val packet = buffer.copyOf(length)
                         try {
                             pool.execute {
-                                var processorThrew = false
-                                val response = try {
-                                    processor.process(packet)
+                                val result = try {
+                                    processor.processDetailed(packet)
                                 } catch (_: Throwable) {
-                                    processorThrew = true
                                     processorFailed.incrementAndGet()
                                     diagnosticMetrics.recordProcessingOutcome("processor_exception")
-                                    null
+                                    return@execute
                                 }
-                                if (response == null) {
-                                    // A thrown exception is counted only as processor_failed.
-                                    if (!processorThrew) {
-                                        if (running.get()) {
-                                            processorNoResponse.incrementAndGet()
-                                            diagnosticMetrics.recordProcessingOutcome(noResponseReason(packet))
-                                        } else {
-                                            stoppedBeforeResponse.incrementAndGet()
-                                            diagnosticMetrics.recordProcessingOutcome("stopped_before_response")
-                                        }
+                                if (result is TunDnsPacketProcessor.PacketResult.NoResponse) {
+                                    if (running.get()) {
+                                        processorNoResponse.incrementAndGet()
+                                        diagnosticMetrics.recordProcessingOutcome(result.reason)
+                                    } else {
+                                        stoppedBeforeResponse.incrementAndGet()
+                                        diagnosticMetrics.recordProcessingOutcome("stopped_before_response")
                                     }
                                     return@execute
                                 }
+                                result as TunDnsPacketProcessor.PacketResult.Response
                                 processorReturnedResponse.incrementAndGet()
+                                diagnosticMetrics.recordProcessingOutcome(result.outcome)
                                 if (!running.get()) {
                                     stoppedBeforeResponse.incrementAndGet()
                                     diagnosticMetrics.recordProcessingOutcome("stopped_after_processor_response")
@@ -173,11 +170,12 @@ class EngineTunVpnService : VpnService() {
                                 }
                                 try {
                                     synchronized(output) {
-                                        output.write(response)
+                                        output.write(result.packet)
                                         output.flush()
                                     }
                                     responsesOut.incrementAndGet()
                                     dnsProcessed.incrementAndGet()
+                                    diagnosticMetrics.recordProcessingOutcome("response_written")
                                 } catch (_: Throwable) {
                                     responseWriteFailed.incrementAndGet()
                                     diagnosticMetrics.recordProcessingOutcome("response_write_failed")
@@ -194,17 +192,6 @@ class EngineTunVpnService : VpnService() {
             } finally {
                 try { output.close() } catch (_: Throwable) {}
             }
-        }
-    }
-
-    private fun noResponseReason(packet: ByteArray): String {
-        val classification = FirewallDnsTrafficClassifier.classify(packet)
-        return when {
-            classification.fragmented -> "ip_fragment_unsupported"
-            classification.network == "UNKNOWN" -> "malformed_or_unsupported_ip"
-            classification.transport != "UDP" -> "unsupported_transport"
-            classification.destinationPort != 53 -> "non_dns_udp_packet"
-            else -> "dns_rejected_cancelled_or_response_encoding_failed"
         }
     }
 

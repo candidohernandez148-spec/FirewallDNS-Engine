@@ -42,6 +42,13 @@ class FirewallDnsTrafficClassifierTest {
         assertEquals(FirewallDnsTrafficClassifier.Certainty.CONFIRMED, result.certainty)
     }
 
+    @Test fun tcp853WithoutTlsSignatureIsOnlyDotPortCandidate() {
+        val result = FirewallDnsTrafficClassifier.classify(ipv4Tcp(51000, 853, byteArrayOf(1, 2, 3, 4)))
+        assertEquals("DOT_PORT_CANDIDATE", result.application)
+        assertEquals(FirewallDnsTrafficClassifier.Certainty.PORT_ONLY, result.certainty)
+        assertEquals("dot_port_without_tls_signature", result.reason)
+    }
+
     @Test fun udp443WithoutQuicSignatureIsNotCalledQuic() {
         val result = FirewallDnsTrafficClassifier.classify(ipv4Udp(51000, 443, byteArrayOf(1, 2, 3, 4)))
         assertEquals("UDP_443_UNKNOWN", result.application)

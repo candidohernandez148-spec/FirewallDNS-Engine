@@ -29,7 +29,7 @@ La clasificación no es excluyente entre capas: un paquete se describe simultán
 - El puerto TCP 443 por sí solo nunca se etiqueta HTTPS.
 - El puerto UDP 443 por sí solo nunca se etiqueta QUIC.
 - Un registro TLS en TCP/443 se presenta como candidato HTTPS/TLS, no como prueba del contenido HTTP.
-- TLS en TCP/853 se presenta como candidato DoT, no como DNS confirmado.
+- TLS en TCP/853 se presenta como candidato DoT, no como DNS confirmado. Si el puerto 853 no contiene una firma TLS, se etiqueta `DOT_PORT_CANDIDATE` con certeza `PORT_ONLY`; nunca `UNKNOWN_ENCRYPTED` ni DoT confirmado.
 - DNS se reconoce por puerto 53 y tamaño mínimo de cabecera; el análisis semántico de la consulta sigue perteneciendo al procesador DNS.
 - HTTP se identifica solo por firmas de métodos en texto claro.
 - No se descifra TLS, QUIC, ECH, DoH ni tráfico cifrado. DoH no puede confirmarse por el puerto 443; DoQ tampoco se afirma sin analizar el protocolo.
@@ -106,3 +106,15 @@ Los contadores y eventos visibles se publicarán en lotes acotados y oportunos. 
 ## Pruebas de la primera entrega
 
 `FirewallDnsTrafficClassifierTest` valida DNS UDP, HTTP en claro, TLS en puerto 443, DoT candidato, QUIC, falsos positivos por puerto 443, fragmentos, entradas truncadas y ausencia de payload en el resultado. Las pruebas sintéticas no acreditan captura integral ni reenvío en Android; esas puertas requieren la fase de transporte y el Samsung A34 5G.
+
+
+## Motivos terminales detallados del procesador DNS (aditivo al schema v3)
+
+El adaptador conserva la API `process()` por compatibilidad y añade `processDetailed()`. Cada paquete procesado termina en una respuesta o en una categoría explícita sin almacenar bytes, dominios ni direcciones:
+
+- Entrada/estructura: `invalid_packet_length`, `unsupported_ip_version`, cabeceras IPv4/IPv6 truncadas o longitudes inválidas.
+- Transporte: `unsupported_transport_tcp`, `unsupported_transport_other`, `ipv4_fragment_unsupported`, `ipv6_fragment_unsupported`, `ipv6_extension_header_unsupported`, `udp_header_truncated`, `udp_length_invalid`.
+- Enrutamiento DNS: `non_dns_udp_packet`, `dns_payload_too_short`, `dns_rejected`, `upstream_cancelled`.
+- Respuesta: `dns_blocked_response`, `dns_forwarded_response`, `upstream_failure_servfail`, `response_encoding_failed`, `response_written`, `response_write_failed`.
+
+Los contadores terminales proceden del mismo resultado detallado que procesa el paquete; ya no se deduce el motivo inspeccionando de nuevo el paquete. La clasificación sigue limitada a las rutas DNS virtuales del servicio de diagnóstico. No activa rutas por defecto ni forwarding TCP/UDP general.
