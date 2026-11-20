@@ -211,6 +211,8 @@ class UdpTunBridgeDiagnosticService : VpnService() {
     @Synchronized
     private fun stopDiagnostic() {
         if (!running.getAndSet(false) && descriptor == null && bridge == null) {
+            runCatching { echoServer?.close() }
+            echoServer = null
             stopForeground(STOP_FOREGROUND_REMOVE)
             return
         }
