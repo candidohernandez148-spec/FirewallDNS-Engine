@@ -30,3 +30,11 @@ Implementa únicamente el dispositivo smoltcp con colas acotadas, validación de
 6. Pruebas en Galaxy A34 5G antes de habilitar la ruta en producción.
 
 Esta secuencia evita sustituir el filtrado DNS que ya funciona por un plano de datos todavía incompleto.
+
+## Validador L4 y framing DNS TCP
+
+`rust-core::l4_packet` añade un preflight puro para IPv4/IPv6 TCP y UDP: IHL/longitudes, checksum IPv4, rechazo de fragmentos y extensiones IPv6, Data Offset TCP, checksum TCP con pseudo-cabecera, longitud UDP y semántica de checksum UDP IPv4/IPv6. Incluye pruebas host-side de paquetes válidos, checksums corruptos, truncamiento, fragmentación y extensiones no soportadas. El módulo se exporta desde la crate, pero todavía no se expone por JNI ni se invoca desde el lector TUN Android.
+
+En la aplicación Android, el camino productivo DNS UDP ahora valida el paquete IP/transporte antes de leer puertos. TCP/53 válido recibe un RST conforme a la regla RFC para segmentos con/sin ACK; sigue siendo rechazo temporal, no DNS-over-TCP de cliente. El `DnsTcpFrameCodec` y el cliente upstream existente ya soportan el prefijo de 2 bytes y fallback UDP truncado → TCP en el lado upstream.
+
+**Puerta pendiente para DNS-over-TCP de cliente:** conectar descriptor TUN existente → JNI → `TunPacketDevice` → `smoltcp::Socket<Tcp>` por flujo → decodificador incremental de mensajes DNS → motor de políticas → respuesta en el mismo socket TCP. Cada cola y tabla de flujos debe estar acotada; sockets externos protegidos antes de `connect`; cancelación y cierre de sesión deterministas. No habilitar full-tunnel ni sustituir la VPN productiva hasta completar pruebas de ida/vuelta IPv4/IPv6, concurrencia, timeouts, saturación, reconexión y dispositivo real.
