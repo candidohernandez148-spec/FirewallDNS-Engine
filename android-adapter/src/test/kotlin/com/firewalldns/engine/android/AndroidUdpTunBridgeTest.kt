@@ -46,7 +46,7 @@ class AndroidUdpTunBridgeTest {
             try {
                 val request = ipv4UdpPacket(
                     source = byteArrayOf(10, 77, 0, 2),
-                    destination = byteArrayOf(198, 18, 0, 1),
+                    destination = byteArrayOf(198.toByte(), 18, 0, 1),
                     sourcePort = 53000,
                     destinationPort = 443,
                     payload = "firewalldns-udp-request".toByteArray(),
@@ -90,7 +90,7 @@ class AndroidUdpTunBridgeTest {
     fun rejectsFragmentedIpv4InsteadOfForwardingPartialDatagram() {
         val packet = ipv4UdpPacket(
             byteArrayOf(10, 77, 0, 2),
-            byteArrayOf(198, 18, 0, 1),
+            byteArrayOf(198.toByte(), 18, 0, 1),
             53000,
             443,
             byteArrayOf(1, 2, 3),
