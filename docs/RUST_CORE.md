@@ -63,3 +63,10 @@ La validación JNI en CI no demuestra rendimiento ni compatibilidad de la ruta T
 `TunPacketDevice` ahora limita RX y TX por dos dimensiones independientes: cantidad de paquetes y bytes retenidos. El constructor compatible `new()` deriva presupuestos de `MTU × capacidad`; `new_with_byte_limits()` permite fijarlos explícitamente. Al consumir un paquete RX o extraer un paquete TX, los bytes se liberan y vuelven a estar disponibles. Los rechazos por presupuesto RX se distinguen como `ReceiveByteLimit`; los TX se contabilizan en `tx_rejected`.
 
 Esta mejora evita que una cola con pocos paquetes grandes retenga más memoria de la prevista y prepara el límite de memoria del futuro puente TUN/smoltcp. No crea todavía el ciclo de polling, asociación de flujos ni reenvío a sockets Android. El TUN productivo y el DNS siguen sin cambios. Las pruebas unitarias cubren saturación por bytes, liberación de presupuesto y recuperación tras dequeue.
+
+
+## Prueba de ingreso UDP desde TUN a smoltcp (laboratorio)
+
+Se añade `rust-core/tests/smoltcp_udp_rx.rs`. La prueba construye un paquete IPv4/UDP de entrada con checksum IPv4 válido, lo introduce en la cola RX acotada de `TunPacketDevice`, ejecuta `Interface.poll()` y comprueba que el socket UDP enlazado al puerto destino recibe exactamente el payload y el endpoint remoto esperados. También verifica que el consumo libera los bytes retenidos en RX.
+
+Junto con la prueba TX existente, esto cubre ambos sentidos del dispositivo virtual: **cola RX → interfaz smoltcp → socket UDP** y **socket UDP → interfaz smoltcp → cola TX**. Sigue siendo una prueba host-side con paquetes sintéticos; no conecta sockets Android, no llama a `VpnService.protect()`, no prueba Internet ni el descriptor TUN real, no implementa el mapeo de flujos ni el ciclo de vida del puente. No habilita UDP general ni modifica DNS productivo.
