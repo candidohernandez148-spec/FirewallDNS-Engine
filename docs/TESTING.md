@@ -166,3 +166,11 @@ El módulo `:android-adapter` se valida en CI con `gradle test` y `gradle :andro
 - `AndroidUdpFlowManagerTest.expiresIdleFlowsAndReleasesTheirCapacity` usa loopback y un timeout corto para comprobar que un flujo sin tráfico notifica expiración, se elimina del gestor y libera su plaza para abrir otro flujo.
 - El timeout de producción predeterminado es 60 s y usa `System.nanoTime()`; el tiempo de pared no afecta la caducidad.
 - Esta prueba verifica ciclo de vida del socket/worker en JVM, no temporización de red móvil, TUN real ni reenvío general.
+
+
+## Arnés TCP DNS smoltcp (host-side)
+
+- `smoltcp_tcp_dns.rs` crea dos interfaces IPv4 smoltcp con dispositivos TUN virtuales acotados y ejecuta un handshake TCP completo entre un cliente y un listener en el puerto 53.
+- El cliente envía frames DNS con prefijo de dos bytes: el primer frame se divide entre escrituras y el segundo se concatena en el mismo stream. El servidor debe recibir exactamente el flujo ordenado, sin bytes perdidos ni añadidos.
+- Ejecutar: `cargo test --manifest-path rust-core/Cargo.toml --test smoltcp_tcp_dns`.
+- Es una prueba host-side de TCP smoltcp y de las colas virtuales; no cubre IPv6, pérdida inducida/retransmisión, timeouts, cierre/RST, sockets Android protegidos, JNI persistente, TUN real, motor de políticas ni upstream. No habilita TCP/53 en la VPN productiva.
