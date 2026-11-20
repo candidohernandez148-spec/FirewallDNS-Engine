@@ -94,7 +94,7 @@ class DnsTcpSessionRegistry(
     fun drainResponses(sessionId: Long, maxFrames: Int = DEFAULT_DRAIN_BATCH): List<ByteArray> {
         val entry = synchronized(lock) { sessions[sessionId] } ?: return emptyList()
         val frames = entry.worker.drainResponses(maxFrames)
-        if (entry.worker.isClosed) removeEntry(sessionId, entry, closeWorker = false)
+        if (entry.worker.isClosed) removeEntry(sessionId, entry)
         return frames
     }
 
