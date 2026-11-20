@@ -1,8 +1,13 @@
 package com.firewalldns.diagnostics
 
 import android.app.Activity
+import android.content.BroadcastReceiver
+import android.content.Context
 import android.content.Intent
 import android.os.Build
+import android.net.VpnService
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.os.Bundle
 import android.view.Gravity
 import android.view.ViewGroup
@@ -24,15 +29,30 @@ import java.time.Instant
 import kotlin.concurrent.thread
 
 /**
- * Local-only diagnostic. It deliberately does not claim to measure an active
- * VpnService, VpnService.protect(), TUN traversal, Wi-Fi/mobile radio or public DNS.
+ * Local diagnostics for the engine. The DNS benchmark is loopback-only; the
+ * separate UDP bridge test uses a temporary, narrowly routed diagnostic VPN.
+ * Neither test measures public-network performance or changes production VPN code.
  */
 class MainActivity : Activity() {
     private lateinit var status: TextView
     private lateinit var runButton: Button
     private lateinit var exportButton: Button
+    private lateinit var udpBridgeButton: Button
     private var reportJson: String? = null
+
     @Volatile private var diagnosticStage: String = "not_started"
+
+    private val udpBridgeReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            val report = intent?.getStringExtra(UdpTunBridgeDiagnosticService.EXTRA_REPORT) ?: return
+            reportJson = report
+            runOnUiThread {
+                status.text = "Resultado de la prueba UDP TUN protegida:\n\n$report"
+                exportButton.isEnabled = true
+                udpBridgeButton.isEnabled = true
+            }
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -46,7 +66,7 @@ class MainActivity : Activity() {
             textSize = 23f
         }
         val explanation = TextView(this).apply {
-            text = "Ejecuta pruebas locales en este celular. No modifica tu VPN ni cambia los DNS del sistema. No recopila historial ni dominios personales."
+            text = "Las pruebas no cambian los DNS del sistema ni recopilan dominios personales. La prueba UDP solicita una VPN temporal y solo enruta una dirección sintética; no la ejecutes mientras otra VPN esté activa."
             textSize = 16f
             setPadding(0, 20, 0, 20)
         }
@@ -59,6 +79,10 @@ class MainActivity : Activity() {
             text = "Ejecutar diagnóstico"
             setOnClickListener { runDiagnostic() }
         }
+        udpBridgeButton = Button(this).apply {
+            text = "Probar UDP por TUN + socket protegido"
+            setOnClickListener { requestUdpBridgeDiagnostic() }
+        }
         exportButton = Button(this).apply {
             text = "Guardar informe JSON"
             isEnabled = false
@@ -68,9 +92,42 @@ class MainActivity : Activity() {
         root.addView(explanation)
         root.addView(status, ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
         root.addView(runButton)
+        root.addView(udpBridgeButton)
         root.addView(exportButton)
         val scroll = ScrollView(this).apply { addView(root) }
         setContentView(scroll)
+        val resultFilter = android.content.IntentFilter(UdpTunBridgeDiagnosticService.ACTION_RESULT)
+        if (Build.VERSION.SDK_INT >= 33) {
+            registerReceiver(udpBridgeReceiver, resultFilter, Context.RECEIVER_NOT_EXPORTED)
+        } else {
+            @Suppress("DEPRECATION")
+            registerReceiver(udpBridgeReceiver, resultFilter)
+        }
+    }
+
+    private fun requestUdpBridgeDiagnostic() {
+        val connectivity = getSystemService(ConnectivityManager::class.java)
+        val activeNetwork = connectivity.activeNetwork
+        val capabilities = activeNetwork?.let(connectivity::getNetworkCapabilities)
+        if (capabilities?.hasTransport(NetworkCapabilities.TRANSPORT_VPN) == true) {
+            status.text = "Hay otra VPN activa. Deténla antes de ejecutar esta prueba para no interrumpirla."
+            return
+        }
+        udpBridgeButton.isEnabled = false
+        status.text = "Solicitando permiso VPN para una prueba aislada de UDP local…"
+        val consent = VpnService.prepare(this)
+        if (consent != null) {
+            startActivityForResult(consent, UDP_VPN_REQUEST)
+        } else {
+            startUdpBridgeService()
+        }
+    }
+
+    private fun startUdpBridgeService() {
+        val intent = Intent(this, UdpTunBridgeDiagnosticService::class.java)
+            .setAction(UdpTunBridgeDiagnosticService.ACTION_START)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(intent)
+        else startService(intent)
     }
 
     private fun runDiagnostic() {
@@ -251,6 +308,15 @@ class MainActivity : Activity() {
     @Deprecated("Deprecated by Android API; retained for compatibility with minSdk 24")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == UDP_VPN_REQUEST) {
+            if (resultCode == RESULT_OK) {
+                startUdpBridgeService()
+            } else {
+                status.text = "Prueba UDP TUN cancelada: no se concedió el permiso VPN."
+                udpBridgeButton.isEnabled = true
+            }
+            return
+        }
         if (requestCode == CREATE_REPORT_REQUEST && resultCode == RESULT_OK) {
             val uri = data?.data ?: return
             val content = pendingReport ?: return
@@ -307,6 +373,11 @@ class MainActivity : Activity() {
         return listOf(at(0.50), at(0.95), at(0.99))
     }
 
+    override fun onDestroy() {
+        runCatching { unregisterReceiver(udpBridgeReceiver) }
+        super.onDestroy()
+    }
+
     private fun jsonString(value: String): String =
         "\"" + value.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n") + "\""
 
@@ -317,6 +388,7 @@ class MainActivity : Activity() {
 
     private companion object {
         const val CREATE_REPORT_REQUEST = 4107
+        const val UDP_VPN_REQUEST = 4108
         var pendingReport: String? = null
     }
 }
