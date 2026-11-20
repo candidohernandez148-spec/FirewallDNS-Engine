@@ -56,3 +56,10 @@ Este gestor **no es todavía el puente TUN/smoltcp**: no convierte paquetes IP e
 El benchmark mide exclusivamente la validación estructural equivalente y el coste de la llamada JNI; no mide la evaluación DNS completa, upstream, `VpnService.protect()`, el TUN activo ni la radio Wi-Fi/datos. No se usa un umbral automático ni se activa Rust en producción por el mero hecho de completar el test. La adopción exige resultados repetibles en el Samsung A34 5G y ausencia de regresiones funcionales.
 
 La validación JNI en CI no demuestra rendimiento ni compatibilidad de la ruta TUN en el Galaxy A34. La adopción en producción exige pruebas comparativas, latencia P50/P95/P99, CPU, memoria, batería, concurrencia y cobertura de protocolos.
+
+
+## Colas smoltcp limitadas por bytes (preparación del puente)
+
+`TunPacketDevice` ahora limita RX y TX por dos dimensiones independientes: cantidad de paquetes y bytes retenidos. El constructor compatible `new()` deriva presupuestos de `MTU × capacidad`; `new_with_byte_limits()` permite fijarlos explícitamente. Al consumir un paquete RX o extraer un paquete TX, los bytes se liberan y vuelven a estar disponibles. Los rechazos por presupuesto RX se distinguen como `ReceiveByteLimit`; los TX se contabilizan en `tx_rejected`.
+
+Esta mejora evita que una cola con pocos paquetes grandes retenga más memoria de la prevista y prepara el límite de memoria del futuro puente TUN/smoltcp. No crea todavía el ciclo de polling, asociación de flujos ni reenvío a sockets Android. El TUN productivo y el DNS siguen sin cambios. Las pruebas unitarias cubren saturación por bytes, liberación de presupuesto y recuperación tras dequeue.
