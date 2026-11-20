@@ -40,7 +40,7 @@ class FirewallDnsDiagnosticMetrics {
         latencySamples.set(slot, elapsedMicros)
     }
 
-    fun snapshotJson(): String {
+    fun recordProcessingOutcome(reason: String) = increment("processing_outcome", reason)\n\n    fun snapshotJson(): String {
         val sampleCount = latencyCursor.get().coerceAtMost(MAX_LATENCY_SAMPLES.toLong()).toInt()
         val samples = LongArray(sampleCount) { latencySamples.get(it) }.sortedArray()
         fun percentile(p: Double): Long {
