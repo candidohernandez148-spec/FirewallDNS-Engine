@@ -143,11 +143,11 @@ class PublicDnsActivity : Activity() {
             setPadding(32, 32, 32, 32)
         }
         root.addView(TextView(this).apply {
-            text = "Diagnóstico DNS de red real"
+            text = "Diagnóstico Integral FirewallDNS — informe único v3"
             textSize = 23f
         })
         root.addView(TextView(this).apply {
-            text = "Consulta dos resolutores públicos (Cloudflare y Google) mediante UDP/53. No cambia los DNS del teléfono. Para medir TUN, apaga FirewallDNS y cualquier otra VPN: Android activará temporalmente una VPN exclusiva de diagnóstico y la detendrá al terminar."
+            text = "Una sola sesión y un solo JSON: clasifica los paquetes que llegan al TUN, agrega protocolos, motivos, bytes y latencias, y registra el alcance real de la captura. Antes de iniciar, desactiva FirewallDNS y cualquier otra VPN. Esta versión enruta solo DNS virtual; no activa captura TCP/UDP general ni corta el tráfico del teléfono."
             textSize = 16f
             setPadding(0, 20, 0, 20)
         })
@@ -183,7 +183,7 @@ class PublicDnsActivity : Activity() {
         root.addView(failoverButton)
         root.addView(tunButton)
         engineTunButton = Button(this).apply {
-            text = "Probar TUN con nuestro motor DNS real"
+            text = "Iniciar diagnóstico integral (un solo informe)"
             setOnClickListener { requestEngineTun() }
         }
         stopEngineTunButton = Button(this).apply {
