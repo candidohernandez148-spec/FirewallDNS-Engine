@@ -58,6 +58,32 @@ class DnsTcpSessionRegistryTest {
     }
 
     @Test
+    fun drainingAResponseRefreshesTheIdleDeadline() {
+        val clock = AtomicLong(100)
+        val ready = CountDownLatch(1)
+        val registry = registry(
+            idleTimeoutNanos = 10,
+            nowNanos = { clock.get() },
+            onReady = { ready.countDown() },
+        )
+
+        try {
+            assertEquals(DnsTcpSessionRegistry.OpenResult.Opened, registry.openSession(8))
+            assertEquals(
+                DnsTcpSessionRegistry.OfferResult.WorkerResult(DnsTcpSessionWorker.OfferResult.Accepted),
+                registry.offer(8, DnsTcpFrameCodec.encode(query("idle-refresh.example"))),
+            )
+            assertTrue(ready.await(2, TimeUnit.SECONDS))
+            clock.set(109)
+            assertEquals(1, registry.drainResponses(8).size)
+            assertEquals(emptyList(), registry.expireIdleSessions(now = 118))
+            assertEquals(listOf(8L), registry.expireIdleSessions(now = 119))
+        } finally {
+            registry.close()
+        }
+    }
+
+    @Test
     fun expiresIdleSessionAndCancelsItsUpstream() {
         val clock = AtomicLong(100)
         val cancelled = CountDownLatch(1)
