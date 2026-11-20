@@ -38,3 +38,15 @@ Esta secuencia evita sustituir el filtrado DNS que ya funciona por un plano de d
 En la aplicación Android, el camino productivo DNS UDP ahora valida el paquete IP/transporte antes de leer puertos. TCP/53 válido recibe un RST conforme a la regla RFC para segmentos con/sin ACK; sigue siendo rechazo temporal, no DNS-over-TCP de cliente. El `DnsTcpFrameCodec` y el cliente upstream existente ya soportan el prefijo de 2 bytes y fallback UDP truncado → TCP en el lado upstream.
 
 **Puerta pendiente para DNS-over-TCP de cliente:** conectar descriptor TUN existente → JNI → `TunPacketDevice` → `smoltcp::Socket<Tcp>` por flujo → decodificador incremental de mensajes DNS → motor de políticas → respuesta en el mismo socket TCP. Cada cola y tabla de flujos debe estar acotada; sockets externos protegidos antes de `connect`; cancelación y cierre de sesión deterministas. No habilitar full-tunnel ni sustituir la VPN productiva hasta completar pruebas de ida/vuelta IPv4/IPv6, concurrencia, timeouts, saturación, reconexión y dispositivo real.
+
+
+## Acumulación incremental DNS sobre TCP
+
+Se añade `DnsTcpStreamDecoder` como componente puro y acotado de `:dns-engine`:
+- Mantiene un buffer fijo por instancia/conexión, sin crecimiento dinámico.
+- Acepta fragmentos arbitrarios del flujo, incluidos prefijo de 2 bytes y cuerpo divididos entre lecturas.
+- Extrae un frame completo por llamada y conserva los bytes posteriores para mensajes concatenados.
+- Rechaza de forma atómica escrituras que exceden el presupuesto y pasa a estado terminal ante una longitud DNS inferior a 12 bytes.
+- Permite limpiar el estado al cerrar/reutilizar una conexión mediante `reset()`.
+
+Este componente no administra TCP, ACK, retransmisiones, ventanas ni sockets. Debe existir una instancia por conexión TCP aceptada por smoltcp y el consumidor debe drenar frames completos antes de aceptar más datos. No habilita DNS-over-TCP en el TUN productivo; sigue pendiente el puente TUN/JNI/smoltcp y la conexión con el motor de políticas y la respuesta por el mismo flujo.
