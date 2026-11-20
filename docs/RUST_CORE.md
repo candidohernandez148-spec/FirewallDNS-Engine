@@ -70,3 +70,10 @@ Esta mejora evita que una cola con pocos paquetes grandes retenga más memoria d
 Se añade `rust-core/tests/smoltcp_udp_rx.rs`. La prueba construye un paquete IPv4/UDP de entrada con checksum IPv4 válido, lo introduce en la cola RX acotada de `TunPacketDevice`, ejecuta `Interface.poll()` y comprueba que el socket UDP enlazado al puerto destino recibe exactamente el payload y el endpoint remoto esperados. También verifica que el consumo libera los bytes retenidos en RX.
 
 Junto con la prueba TX existente, esto cubre ambos sentidos del dispositivo virtual: **cola RX → interfaz smoltcp → socket UDP** y **socket UDP → interfaz smoltcp → cola TX**. Sigue siendo una prueba host-side con paquetes sintéticos; no conecta sockets Android, no llama a `VpnService.protect()`, no prueba Internet ni el descriptor TUN real, no implementa el mapeo de flujos ni el ciclo de vida del puente. No habilita UDP general ni modifica DNS productivo.
+
+
+## Prueba de ida y vuelta UDP smoltcp con socket loopback (laboratorio)
+
+Se añade `rust-core/tests/smoltcp_udp_roundtrip.rs`. La prueba toma un datagrama producido por un socket UDP de smoltcp y extraído de la cola TX, lo valida y lo transporta mediante un socket UDP loopback del host. La respuesta se encapsula en un paquete IPv4/UDP sintético, se introduce en la cola RX acotada y se entrega al socket smoltcp mediante `Interface.poll()`. Se comprueban payload, puertos, endpoint remoto y liberación de la cola RX.
+
+Este es un arnés de ida y vuelta de la frontera smoltcp y del contrato de transporte; el socket loopback sustituye al socket Android. **No prueba `VpnService.protect()`, un descriptor TUN real, JNI persistente, rutas a Internet, IPv6, fragmentación ni la VPN de producción.** No modifica ni intercepta el DNS productivo. La siguiente etapa debe integrar el ciclo de polling y el gestor de sockets Android en un servicio de diagnóstico aislado, manteniendo el protector obligatorio y el cierre ligado al ciclo de vida del servicio.
