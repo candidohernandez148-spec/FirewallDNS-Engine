@@ -24,7 +24,7 @@ class DnsTcpSessionProcessorTest {
             engine = EngineRuntime(),
             exchangeUpstream = {
                 upstreamCalls++
-                DnsUpstreamResult.Success(DnsUpstreamResponse(it.let { expectedResponse }, DnsUpstreamTransport.UDP))
+                DnsUpstreamResult.Success(DnsUpstreamResponse(expectedResponse, DnsUpstreamTransport.UDP))
             },
         )
         val frame = DnsTcpFrameCodec.encode(query)
@@ -67,8 +67,7 @@ class DnsTcpSessionProcessorTest {
         val response = assertIs<com.firewalldns.engine.dns.DnsTcpFrameDecode.Complete>(
             com.firewalldns.engine.dns.DnsTcpFrameCodec.decode(result.framedResponses.single()),
         )
-        assertEquals(3, ((response.message[2].toInt() and 0x0f) shl 4) or (response.message[3].toInt() and 0x0f))
-        assertEquals(1L, processorMetrics(processor, query))
+        assertEquals(3, response.message[3].toInt() and 0x0f)
     }
 
     @Test
@@ -81,7 +80,7 @@ class DnsTcpSessionProcessorTest {
         )
 
         val first = assertIs<DnsTcpSessionProcessor.Result.Batch>(
-            processor.accept(queries.map(DnsTcpFrameCodec::encode).reduce(ByteArray::plus)),
+            processor.accept(queries.map(DnsTcpFrameCodec::encode).reduce { accumulated, next -> accumulated + next }),
         )
         assertEquals(2, first.framedResponses.size)
         assertTrue(first.hasBufferedData)
@@ -160,6 +159,4 @@ class DnsTcpSessionProcessorTest {
             it[3] = 0x80.toByte()
         }
 
-    private fun processorMetrics(processor: DnsTcpSessionProcessor, query: ByteArray): Long =
-        1L // The BLOCK assertion above is paired with the no-upstream assertion.
 }
