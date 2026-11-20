@@ -61,13 +61,31 @@ class PublicDnsActivity : Activity() {
             val allowed = intent.getLongExtra("allowed", 0)
             val rejected = intent.getLongExtra("rejected", 0)
             val updatedAt = intent.getLongExtra("updated_at_elapsed_ms", android.os.SystemClock.elapsedRealtime())
+            val trafficClassification = intent.getStringExtra("traffic_classification") ?: "{}"
             val startedAt = engineTunStartedAtElapsed.takeIf { it > 0L } ?: updatedAt
             val durationMs = (updatedAt - startedAt).coerceAtLeast(0L)
             engineTunReport = """{
   "format": "firewalldns-engine-tun-diagnostic",
-  "schema_version": 2,
+  "schema_version": 3,
   "state": "$state",
   "duration_ms": $durationMs,
+  "device": {
+    "manufacturer": "${Build.MANUFACTURER}",
+    "model": "${Build.MODEL}",
+    "android_release": "${Build.VERSION.RELEASE}",
+    "sdk_int": ${Build.VERSION.SDK_INT}
+  },
+  "coverage": {
+    "capture_mode": "dns_virtual_routes_only",
+    "default_routes_enabled": false,
+    "ipv4_route": "10.77.0.1/32",
+    "ipv6_route": "fd77::1/128",
+    "full_device_capture": false,
+    "tcp_udp_scope": "only packets actually delivered to these DNS virtual TUN routes",
+    "flow_tracking_enabled": false,
+    "application_identity_enabled": false
+  },
+  "traffic_classification": $trafficClassification,
   "metrics": {
     "packets_in": $packets,
     "dns_processed": $processed,
@@ -85,13 +103,17 @@ class PublicDnsActivity : Activity() {
     "dropped": $dropped
   },
   "privacy": {
+    "payloads_stored": false,
+    "domains_stored": false,
+    "addresses_stored": false,
+    "uids_or_package_names_stored": false,
     "domain_names_recorded": false,
     "packet_payloads_recorded": false
   },
   "updated_at_elapsed_ms": $updatedAt
 }"""
             report = engineTunReport
-            status.text = "Motor propio en TUN: $state\nPaquetes recibidos: $packets\nRespuestas procesadas: $processed\nRespuestas enviadas: $sent\nProcesador con respuesta: $processorReturned | Sin respuesta: $processorNoResponse | Excepción: $processorFailed\nCola saturada: $queueRejected | Error al escribir: $responseWriteFailed | Detenidos antes de responder: $stoppedBeforeResponse\nBLOCK: $blocked | OBSERVE: $observed | ALLOW: $allowed\nRechazados: $rejected\nDescartados (suma de causas): $dropped\nDuración: ${durationMs / 1000}s\n\nPulsa «Guardar informe JSON» para exportar estos datos. Se actualizan cada 0,5 segundos.\n\nSolo se enruta al túnel el DNS dirigido a sus direcciones virtuales; no es un firewall de todo el tráfico."
+            status.text = "Motor propio en TUN: $state\nPaquetes recibidos: $packets\nRespuestas procesadas: $processed\nRespuestas enviadas: $sent\nProcesador con respuesta: $processorReturned | Sin respuesta: $processorNoResponse | Excepción: $processorFailed\nCola saturada: $queueRejected | Error al escribir: $responseWriteFailed | Detenidos antes de responder: $stoppedBeforeResponse\nBLOCK: $blocked | OBSERVE: $observed | ALLOW: $allowed\nRechazados: $rejected\nDescartados (suma de causas): $dropped\nDuración: ${durationMs / 1000}s\n\nPulsa «Guardar informe JSON» para exportar estos datos. Se actualizan cada 0,5 segundos.\n\nSolo se enruta al túnel el DNS dirigido a sus direcciones virtuales. El clasificador registra los protocolos de los paquetes que Android entrega al TUN, pero esta sesión no captura TCP/UDP general ni representa todo el tráfico del teléfono."
             exportButton.isEnabled = true
             engineTunButton.isEnabled = state != "running" && state != "starting"
             stopEngineTunButton.isEnabled = state == "running" || state == "starting" || state == "stopping"
