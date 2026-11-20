@@ -58,6 +58,37 @@ class AndroidUdpFlowManagerTest {
     }
 
     @Test
+    fun expiresIdleFlowsAndReleasesTheirCapacity() {
+        DatagramSocket(0, InetAddress.getLoopbackAddress()).use { peer ->
+            val idle = CountDownLatch(1)
+            val manager = newManager(maxFlows = 1, idleTimeoutMillis = 100)
+            try {
+                manager.open(
+                    InetSocketAddress(InetAddress.getLoopbackAddress(), peer.localPort),
+                    object : AndroidUdpFlowListener {
+                        override fun onDatagram(datagram: ByteArray) = Unit
+                        override fun onIdleTimeout() { idle.countDown() }
+                    },
+                )
+                assertTrue("Idle flow was not notified", idle.await(2, TimeUnit.SECONDS))
+                val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(2)
+                while (manager.activeFlowCount != 0 && System.nanoTime() < deadline) {
+                    Thread.sleep(10)
+                }
+                assertEquals(0, manager.activeFlowCount)
+                manager.open(
+                    InetSocketAddress(InetAddress.getLoopbackAddress(), peer.localPort),
+                    object : AndroidUdpFlowListener {
+                        override fun onDatagram(datagram: ByteArray) = Unit
+                    },
+                ).close()
+            } finally {
+                manager.close()
+            }
+        }
+    }
+
+    @Test
     fun enforcesFlowLimitAndReleasesCapacityWhenFlowCloses() {
         DatagramSocket(0, InetAddress.getLoopbackAddress()).use { firstPeer ->
             DatagramSocket(0, InetAddress.getLoopbackAddress()).use { secondPeer ->
@@ -177,6 +208,7 @@ class AndroidUdpFlowManagerTest {
     private fun newManager(
         maxFlows: Int,
         maxDatagramBytes: Int = 1_024,
+        idleTimeoutMillis: Int = 10_000,
     ): AndroidUdpFlowManager {
         val protector = object : DnsSocketProtector {
             override fun protect(socket: DatagramSocket): Boolean = true
@@ -188,6 +220,7 @@ class AndroidUdpFlowManagerTest {
             maxQueuedDatagramsPerFlow = 4,
             maxDatagramBytes = maxDatagramBytes,
             receivePollTimeoutMillis = 25,
+            idleTimeoutMillis = idleTimeoutMillis,
         )
     }
 }
