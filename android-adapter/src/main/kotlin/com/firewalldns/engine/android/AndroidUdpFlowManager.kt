@@ -210,6 +210,7 @@ class AndroidUdpFlowManager(
         const val MAX_ALLOWED_DATAGRAM_BYTES = 65_507
         const val MAX_QUEUED_BYTES = 16L * 1024L * 1024L
         const val DEFAULT_MAX_QUEUED_BYTES_PER_FLOW = 256 * 1024
+        const val MAX_ALLOWED_QUEUED_BYTES_PER_FLOW = 256 * 1024
         const val DEFAULT_RECEIVE_POLL_TIMEOUT_MILLIS = 100
         const val MIN_RECEIVE_BUFFER_BYTES = 512
     }
