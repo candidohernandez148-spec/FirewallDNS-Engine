@@ -17,6 +17,8 @@ import java.util.concurrent.atomic.AtomicLong
 interface AndroidUdpFlowListener {
     fun onDatagram(datagram: ByteArray)
     fun onFailure(cause: IOException) = Unit
+    /** Called once when a flow has received/sent no datagrams for its configured idle period. */
+    fun onIdleTimeout() = Unit
 }
 
 /** A single remote UDP association. The manager owns its socket and worker lifecycle. */
@@ -34,7 +36,8 @@ interface AndroidUdpFlow : AutoCloseable {
  *
  * Each flow has one worker that alternates bounded outbound sends with timed receives.
  * All sockets come from AndroidProtectedUdpSocketFactory, so protect() precedes connect().
- * This is not a TUN/smoltcp bridge and must not be used as a production packet path yet.
+ * Idle flows expire automatically, releasing their socket, worker and flow-limit slot.
+ * This is not a production packet path.
  */
 class AndroidUdpFlowManager(
     private val socketFactory: AndroidProtectedUdpSocketFactory,
@@ -43,12 +46,14 @@ class AndroidUdpFlowManager(
     maxDatagramBytes: Int = DEFAULT_MAX_DATAGRAM_BYTES,
     maxQueuedBytesPerFlow: Int = DEFAULT_MAX_QUEUED_BYTES_PER_FLOW,
     receivePollTimeoutMillis: Int = DEFAULT_RECEIVE_POLL_TIMEOUT_MILLIS,
+    idleTimeoutMillis: Int = DEFAULT_IDLE_TIMEOUT_MILLIS,
 ) : AutoCloseable {
     private val flowLimit = maxFlows.also { require(it in 1..MAX_ALLOWED_FLOWS) }
     private val queueLimit = maxQueuedDatagramsPerFlow.also { require(it in 1..MAX_ALLOWED_QUEUE_CAPACITY) }
     private val datagramLimit = maxDatagramBytes.also { require(it in 1..MAX_ALLOWED_DATAGRAM_BYTES) }
     private val byteQueueLimit = maxQueuedBytesPerFlow.also { require(it in datagramLimit..MAX_ALLOWED_QUEUED_BYTES_PER_FLOW) }
     private val pollTimeout = receivePollTimeoutMillis.also { require(it in 10..1_000) }
+    private val idleTimeout = idleTimeoutMillis.also { require(it in pollTimeout..MAX_IDLE_TIMEOUT_MILLIS) }
 
     init {
         require(flowLimit.toLong() * byteQueueLimit.toLong() <= MAX_QUEUED_BYTES) {
@@ -110,11 +115,10 @@ class AndroidUdpFlowManager(
         private val listener: AndroidUdpFlowListener,
     ) : AndroidUdpFlow, Runnable {
         private val active = AtomicBoolean(true)
+        private val lastActivityNanos = AtomicLong(System.nanoTime())
         private val outbound = ArrayBlockingQueue<ByteArray>(queueLimit)
         private val outboundLock = Any()
         private var outboundBytes = 0
-
-        val queuedOutboundBytes: Int get() = synchronized(outboundLock) { outboundBytes }
 
         override fun send(datagram: ByteArray): Boolean {
             if (datagram.isEmpty() || datagram.size > datagramLimit || !active.get()) {
@@ -131,6 +135,7 @@ class AndroidUdpFlowManager(
                     return false
                 }
                 outboundBytes += datagram.size
+                lastActivityNanos.set(System.nanoTime())
                 return true
             }
         }
@@ -158,6 +163,7 @@ class AndroidUdpFlowManager(
                         } ?: break
                         socket.send(DatagramPacket(pending, pending.size))
                         sent.incrementAndGet()
+                        lastActivityNanos.set(System.nanoTime())
                     }
 
                     try {
@@ -166,11 +172,15 @@ class AndroidUdpFlowManager(
                         if (active.get() && packet.length > datagramLimit) {
                             rejected.incrementAndGet()
                         } else if (active.get() && packet.length > 0) {
+                            lastActivityNanos.set(System.nanoTime())
                             received.incrementAndGet()
                             listener.onDatagram(receiveBuffer.copyOfRange(packet.offset, packet.offset + packet.length))
                         }
                     } catch (_: SocketTimeoutException) {
-                        // Timed receive lets the worker service its outbound queue and observe shutdown.
+                        if (idleDurationReached()) {
+                            runCatching { listener.onIdleTimeout() }
+                            break
+                        }
                     }
                 }
             } catch (failure: IOException) {
@@ -191,6 +201,9 @@ class AndroidUdpFlowManager(
                 flows.remove(id, this)
             }
         }
+
+        private fun idleDurationReached(): Boolean =
+            System.nanoTime() - lastActivityNanos.get() >= idleTimeout.toLong() * NANOS_PER_MILLI
     }
 
     private class FlowThreadFactory : ThreadFactory {
@@ -212,6 +225,9 @@ class AndroidUdpFlowManager(
         const val DEFAULT_MAX_QUEUED_BYTES_PER_FLOW = 256 * 1024
         const val MAX_ALLOWED_QUEUED_BYTES_PER_FLOW = 256 * 1024
         const val DEFAULT_RECEIVE_POLL_TIMEOUT_MILLIS = 100
+        const val DEFAULT_IDLE_TIMEOUT_MILLIS = 60_000
+        const val MAX_IDLE_TIMEOUT_MILLIS = 300_000
+        const val NANOS_PER_MILLI = 1_000_000L
         const val MIN_RECEIVE_BUFFER_BYTES = 512
     }
 }
