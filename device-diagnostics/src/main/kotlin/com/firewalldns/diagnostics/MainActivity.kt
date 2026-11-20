@@ -95,7 +95,7 @@ class MainActivity : Activity() {
         setContentView(scroll)
         val resultFilter = android.content.IntentFilter(UdpTunBridgeDiagnosticService.ACTION_RESULT)
         if (Build.VERSION.SDK_INT >= 33) {
-            registerReceiver(udpBridgeReceiver, resultFilter, RECEIVER_NOT_EXPORTED)
+            registerReceiver(udpBridgeReceiver, resultFilter, Context.RECEIVER_NOT_EXPORTED)
         } else {
             @Suppress("DEPRECATION")
             registerReceiver(udpBridgeReceiver, resultFilter)
