@@ -145,3 +145,11 @@ El módulo `:android-adapter` se valida en CI con `gradle test` y `gradle :andro
 - De las 390 decisiones, 378 fueron permitidas y 12 observadas; ninguna bloqueada. Esto no valida el bloqueo de amenazas.
 - El informe confirma un recorrido DNS/TUN operativo para los paquetes respondidos durante esa sesión, pero no mide el nuevo puente UDP protegido, no valida smoltcp/Rust en la ruta productiva y no acredita TCP ni cobertura completa de UDP.
 - Privacidad: el informe declara que no guardó nombres de dominio ni payloads. Se mantiene como evidencia histórica, no como resultado actual del nuevo diagnóstico UDP.
+
+
+## Informe integral unificado v3
+
+- `FirewallDnsDiagnosticMetricsTest` comprueba agregación por transporte/aplicación/certeza, bytes, reinicio de contadores y ausencia de payload en el informe.
+- `EngineTunVpnService` clasifica cada paquete leído antes de encolarlo; el informe v3 agrega IPv4/IPv6, TCP/UDP/ICMP/otros, DNS/HTTP/TLS/QUIC/candidatos/desconocidos, certeza, razones y latencia de clasificación P50/P95/P99 con un máximo de 1024 muestras.
+- `coverage` declara rutas DNS virtuales `/32` y `/128`, sin rutas por defecto, sin captura integral, sin tracking de flujos y sin identidad de aplicación. El servicio no habilita TCP/UDP forwarding general.
+- La prueba unitaria valida el agregador y el CI compila el APK; solo una prueba en Samsung A34 5G confirma qué protocolos llegan realmente al TUN. No interpretar ausencia de TCP en el informe como ausencia de TCP en el teléfono.
