@@ -135,3 +135,13 @@ El módulo `:android-adapter` se valida en CI con `gradle test` y `gradle :andro
 - El resultado debe incluir `success: true`, un paquete recibido por TUN y una respuesta escrita al TUN. El informe identifica modelo/Android y confirma que no se usó red pública ni se interceptó DNS.
 - Repetir en Samsung Galaxy A34 5G con Wi-Fi y datos móviles activos; guardar cada JSON por separado.
 - La prueba valida el camino Android TUN/socket protegido/reinyección UDP local, no conectividad UDP a Internet, smoltcp, TCP, fragmentación, IPv6 end-to-end, rendimiento de radio ni ausencia general de fugas.
+
+## Informe TUN recuperado del repositorio de pruebas del dispositivo
+
+- Se conserva el archivo original sin datos de dominios ni payloads en `docs/archive/Pruebas-en-el-celular-firewalldns-engine-tun-diagnostico.json`.
+- En la sesión reportada (10 min 19 s): 430 paquetes entraron, 390 se procesaron como DNS y 390 respuestas se escribieron correctamente.
+- No hubo errores del procesador, rechazos de cola, errores de escritura de respuesta ni paradas antes de responder.
+- Los 40 paquetes restantes figuran como `processor_no_response` y `dropped`; el JSON no identifica su causa. No clasificarlos como fallos DNS sin instrumentación adicional.
+- De las 390 decisiones, 378 fueron permitidas y 12 observadas; ninguna bloqueada. Esto no valida el bloqueo de amenazas.
+- El informe confirma un recorrido DNS/TUN operativo para los paquetes respondidos durante esa sesión, pero no mide el nuevo puente UDP protegido, no valida smoltcp/Rust en la ruta productiva y no acredita TCP ni cobertura completa de UDP.
+- Privacidad: el informe declara que no guardó nombres de dominio ni payloads. Se mantiene como evidencia histórica, no como resultado actual del nuevo diagnóstico UDP.
