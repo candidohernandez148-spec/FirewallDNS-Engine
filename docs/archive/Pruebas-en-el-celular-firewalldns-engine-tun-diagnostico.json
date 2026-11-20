@@ -1,0 +1,27 @@
+{
+  "format": "firewalldns-engine-tun-diagnostic",
+  "schema_version": 2,
+  "state": "stopped",
+  "duration_ms": 619057,
+  "metrics": {
+    "packets_in": 430,
+    "dns_processed": 390,
+    "responses_out": 390,
+    "processor_returned_response": 390,
+    "processor_no_response": 40,
+    "processor_failed": 0,
+    "queue_rejected": 0,
+    "response_write_failed": 0,
+    "stopped_before_response": 0,
+    "blocked": 0,
+    "observed": 12,
+    "allowed": 378,
+    "rejected": 0,
+    "dropped": 40
+  },
+  "privacy": {
+    "domain_names_recorded": false,
+    "packet_payloads_recorded": false
+  },
+  "updated_at_elapsed_ms": 95058418
+}
