@@ -291,9 +291,8 @@ mod tests {
     fn validates_ipv4_udp_without_checksum_and_ipv6_udp_with_checksum() {
         let mut v4 = make_packet(false, IPPROTO_UDP, &[1, 2]);
         assert!(validate_tun_l4_packet(&v4).unwrap().is_udp());
+        // Changing the UDP checksum does not alter the IPv4 header checksum.
         v4[26..28].fill(0);
-        let checksum_value = checksum(&v4[..20]);
-        v4[10..12].copy_from_slice(&checksum_value.to_be_bytes());
         assert!(validate_tun_l4_packet(&v4).unwrap().is_udp());
 
         let v6 = make_packet(true, IPPROTO_UDP, &[3, 4]);
