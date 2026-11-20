@@ -180,8 +180,6 @@ class PublicDnsActivity : Activity() {
         root.addView(status, ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
         root.addView(runButton)
         root.addView(exportButton)
-        root.addView(failoverButton)
-        root.addView(tunButton)
         engineTunButton = Button(this).apply {
             text = "Iniciar diagnóstico integral (un solo informe)"
             setOnClickListener { requestEngineTun() }
