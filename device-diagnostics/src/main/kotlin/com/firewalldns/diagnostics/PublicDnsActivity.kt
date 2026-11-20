@@ -13,6 +13,7 @@ import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
+import org.json.JSONObject
 import kotlin.concurrent.thread
 
 /** Public resolver tests and isolated VpnService/TUN diagnostic launcher. */
@@ -70,9 +71,9 @@ class PublicDnsActivity : Activity() {
   "state": "$state",
   "duration_ms": $durationMs,
   "device": {
-    "manufacturer": "${Build.MANUFACTURER}",
-    "model": "${Build.MODEL}",
-    "android_release": "${Build.VERSION.RELEASE}",
+    "manufacturer": ${JSONObject.quote(Build.MANUFACTURER)},
+    "model": ${JSONObject.quote(Build.MODEL)},
+    "android_release": ${JSONObject.quote(Build.VERSION.RELEASE)},
     "sdk_int": ${Build.VERSION.SDK_INT}
   },
   "coverage": {
