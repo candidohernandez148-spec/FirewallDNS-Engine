@@ -118,6 +118,47 @@ class AndroidUdpFlowManagerTest {
     }
 
     @Test
+    fun rejectsOversizedInboundDatagramsInsteadOfDeliveringTruncatedPayloads() {
+        DatagramSocket(0, InetAddress.getLoopbackAddress()).use { peer ->
+            peer.soTimeout = 2_000
+            val receivedByFlow = CountDownLatch(1)
+            val delivered = AtomicReference<ByteArray>()
+            val manager = newManager(maxFlows = 1, maxDatagramBytes = 32)
+            try {
+                val flow = manager.open(
+                    InetSocketAddress(InetAddress.getLoopbackAddress(), peer.localPort),
+                    object : AndroidUdpFlowListener {
+                        override fun onDatagram(datagram: ByteArray) {
+                            delivered.set(datagram)
+                            receivedByFlow.countDown()
+                        }
+                    },
+                )
+                val probe = "firewalldns-probe".toByteArray()
+                assertTrue(flow.send(probe))
+                val source = DatagramPacket(ByteArray(128), 128)
+                peer.receive(source)
+
+                val oversized = ByteArray(33) { 7 }
+                peer.send(DatagramPacket(oversized, oversized.size, source.address, source.port))
+                val valid = byteArrayOf(1, 2, 3)
+                peer.send(DatagramPacket(valid, valid.size, source.address, source.port))
+
+                assertTrue(
+                    "Flow did not deliver the valid datagram after rejecting the oversized one",
+                    receivedByFlow.await(2, TimeUnit.SECONDS),
+                )
+                assertArrayEquals(valid, delivered.get())
+                assertEquals(1L, manager.rejectedDatagramCount)
+                assertEquals(1L, manager.receivedDatagramCount)
+                flow.close()
+            } finally {
+                manager.close()
+            }
+        }
+    }
+
+    @Test
     fun rejectsQueueConfigurationThatExceedsAggregateMemoryBudget() {
         val protector = object : DnsSocketProtector {
             override fun protect(socket: DatagramSocket): Boolean = true

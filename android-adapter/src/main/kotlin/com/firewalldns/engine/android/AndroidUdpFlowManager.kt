@@ -135,7 +135,7 @@ class AndroidUdpFlowManager(
         }
 
         override fun run() {
-            val receiveBuffer = ByteArray(datagramLimit)
+            val receiveBuffer = ByteArray(datagramLimit + 1)
             try {
                 while (active.get() && !closed.get()) {
                     while (true) {
@@ -147,7 +147,9 @@ class AndroidUdpFlowManager(
                     try {
                         val packet = DatagramPacket(receiveBuffer, receiveBuffer.size)
                         socket.receive(packet)
-                        if (active.get() && packet.length > 0) {
+                        if (active.get() && packet.length > datagramLimit) {
+                            rejected.incrementAndGet()
+                        } else if (active.get() && packet.length > 0) {
                             received.incrementAndGet()
                             listener.onDatagram(receiveBuffer.copyOfRange(packet.offset, packet.offset + packet.length))
                         }
