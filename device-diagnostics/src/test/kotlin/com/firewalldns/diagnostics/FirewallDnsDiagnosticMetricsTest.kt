@@ -33,7 +33,7 @@ class FirewallDnsDiagnosticMetricsTest {
         assertTrue(json.contains("\"samples\": 2"))
     }
 
-    @Test fun resetClearsAllCountersAndSamples() {
+    @Test fun recordsProcessingFailuresByCause() {\n        val metrics = FirewallDnsDiagnosticMetrics()\n        metrics.recordProcessingOutcome("queue_rejected")\n        metrics.recordProcessingOutcome("response_write_failed")\n        val json = metrics.snapshotJson()\n        assertTrue(json.contains("\\\"queue_rejected\\\": 1"))\n        assertTrue(json.contains("\\\"response_write_failed\\\": 1"))\n    }\n\n    @Test fun resetClearsAllCountersAndSamples() {
         val metrics = FirewallDnsDiagnosticMetrics()
         val packet = ipv4Udp(53000, 53, ByteArray(12))
         metrics.record(packet, packet.size)
