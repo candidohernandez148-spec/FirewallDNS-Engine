@@ -85,27 +85,30 @@ flowchart TD
 
 Este mapa describe el código y no promete que Android enrute absolutamente todo el tráfico del dispositivo hacia la VPN. La cobertura exacta depende de las rutas, exclusiones y comportamiento del sistema.
 
-## 4. Diagnóstico existente: qué demuestra y qué no
+## 4. Diagnósticos del dispositivo: evolución y límites
 
-El último informe TUN archivado registra:
+El informe más reciente de `Pruebas-en-el-celular` registra una sesión de 830319 ms:
 
-| Contador | Valor |
-|---|---:|
-| Paquetes que entraron | 430 |
-| DNS procesados | 390 |
-| Respuestas escritas | 390 |
-| Procesador devolvió respuesta | 390 |
-| Procesador sin respuesta | 40 |
-| Errores de procesamiento | 0 |
-| Rechazos de cola | 0 |
-| Errores de escritura | 0 |
-| Detenidos antes de responder | 0 |
-| BLOCK / OBSERVE / ALLOW | 0 / 12 / 378 |
-| Descartados | 40 |
+| Contador | Informe anterior | Informe más reciente |
+|---|---:|---:|
+| Paquetes que entraron | 430 | 651 |
+| DNS procesados | 390 | 594 |
+| Respuestas escritas | 390 | 594 |
+| Procesador devolvió respuesta | 390 | 594 |
+| Procesador sin respuesta | 40 | 57 |
+| Errores de procesamiento | 0 | 0 |
+| Rechazos de cola | 0 | 0 |
+| Errores de escritura | 0 | 0 |
+| Detenidos antes de responder | 0 | 0 |
+| BLOCK / OBSERVE / ALLOW | 0 / 12 / 378 | 0 / 25 / 569 |
+| Descartados | 40 | 57 |
+| Duración | 619057 ms | 830319 ms |
 
-Interpretación: las 390 consultas contabilizadas como DNS procesadas recibieron respuesta. Los 40 restantes no obtuvieron respuesta DNS y figuran como descartados. El informe no conserva protocolo, puertos ni motivo por paquete, por lo que **no permite afirmar qué tipo de tráfico son esos 40 paquetes** ni atribuirlos a un fallo DNS.
+En el informe más reciente, 594 de 594 consultas contabilizadas como DNS procesadas recibieron respuesta. Los 57 paquetes restantes no obtuvieron respuesta DNS y figuran como descartados. La proporción de paquetes sin respuesta DNS sobre la entrada pasó de 40/430 (9,30 %) a 57/651 (8,76 %); esto no identifica por sí mismo la causa ni demuestra que esos paquetes fueran consultas DNS.
 
-El informe protege la privacidad: no registra nombres de dominio ni payloads. Se debe conservar esa propiedad.
+Los dos informes mantienen cero errores del procesador, cero rechazos de cola, cero errores de escritura y cero detenciones antes de responder. Esto acota las hipótesis: los contadores actuales no apuntan a saturación de la cola ni a fallos de escritura en esas sesiones. Pero no permiten clasificar los paquetes sin respuesta.
+
+El informe más reciente protege la privacidad: no registra nombres de dominio ni payloads. Se debe conservar esa propiedad. **Falta protocolo, puerto de destino agrupado y motivo terminal por paquete** para conocer qué representan los 57.
 
 ## 5. Instrumentación necesaria para cerrar los puntos ciegos
 
@@ -139,7 +142,7 @@ Cada paquete debe incrementar exactamente un resultado terminal por ruta (respon
 
 ## 7. Siguiente trabajo recomendado
 
-El siguiente cambio debe ser **observabilidad por etapa en la VPN productiva**, empezando por clasificar los 40 paquetes no DNS/sin respuesta y cada descarte silencioso. No conectar todavía smoltcp ni el puente UDP experimental al tráfico real. Cuando el mapa de contadores cierre la entrada y la salida de cada clase, se podrá decidir con evidencia qué parte del transporte conviene integrar y cuál no.
+El siguiente cambio debe ser **observabilidad por etapa en la VPN productiva**, empezando por clasificar los 57 paquetes sin respuesta del informe más reciente y cada descarte silencioso. No conectar todavía smoltcp ni el puente UDP experimental al tráfico real. Cuando el mapa de contadores cierre la entrada y la salida de cada clase, se podrá decidir con evidencia qué parte del transporte conviene integrar y cuál no.
 
 ## Fuentes de código
 
