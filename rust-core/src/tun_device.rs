@@ -239,9 +239,8 @@ mod tests {
             packet.len()
         });
         assert_eq!(received_len, 20);
-        assert_eq!(device.queued_rx_bytes(), 0);
-
         tx.consume(24, |packet| packet.fill(0x60));
+        assert_eq!(device.queued_rx_bytes(), 0);
         assert_eq!(device.queued_tx(), 1);
         assert_eq!(device.queued_tx_bytes(), 24);
 
