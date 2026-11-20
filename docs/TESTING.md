@@ -113,6 +113,12 @@ El módulo `:android-adapter` se valida en CI con `gradle test` y `gradle :andro
 - Limitación: los contadores son instantáneas concurrentes; durante una parada abrupta pueden quedar tareas en ejecución al emitirse el último broadcast. No usar aún el informe para declarar cero pérdidas ni para aprobar integración de producción. La validación de cierre consistente y la prueba física de 15 minutos siguen siendo obligatorias.
 
 
+## Validador unificado TCP/UDP experimental
+
+- `rust-core::l4_packet` cubre TCP y UDP sobre IPv4/IPv6 con pruebas de cabecera, longitudes, checksums, Data Offset TCP, UDP checksum IPv4 cero/IPv6 obligatorio, fragmentos y extensiones IPv6.
+- Ejecutar con `cargo test --manifest-path rust-core/Cargo.toml`.
+- Estas pruebas son host-side y no prueban JNI, descriptor TUN Android, sockets protegidos, estado TCP ni DNS-over-TCP desde el cliente.
+
 ## Núcleo Rust/JNI experimental
 
 - La suite Rust ejecuta fixtures deterministas IPv4/IPv6, checksum IPv4, checksum UDP IPv6 obligatorio, puerto DNS, truncamiento y fragmentación IPv4: cargo test --manifest-path rust-core/Cargo.toml.

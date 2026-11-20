@@ -1,15 +1,17 @@
 //! Experimental native packet preflight for FirewallDNS.
 //!
-//! This crate validates only unfragmented UDP DNS packets carried directly by
-//! IPv4 or IPv6. It is not a TCP/IP stack and does not make policy decisions.
-//! Kotlin remains the production authority until parity and device benchmarks
-//! justify a measured migration.
+//! This crate validates unfragmented UDP DNS packets and exposes a unified
+//! IPv4/IPv6 TCP + UDP transport validator. It is not a TCP/IP stack, does not
+//! manage flows, and does not make policy decisions. Kotlin remains the
+//! production authority until parity and device benchmarks justify migration.
 
 mod tun_device;
 mod udp_packet;
+mod l4_packet;
 
 pub use tun_device::{TunPacketDevice, TunQueueError};
 pub use udp_packet::{parse_udp_packet, UdpDatagram, UdpPacketError};
+pub use l4_packet::{validate_tun_l4_packet, PacketValidationResult, ValidatedTransportPacket};
 
 use jni::objects::{JByteArray, JObject};
 use jni::sys::jint;
