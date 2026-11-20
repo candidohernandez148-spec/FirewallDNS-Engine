@@ -6,6 +6,12 @@ Mantener **una sola herramienta de diagnóstico** que reúna clasificación de p
 
 El diagnóstico es pasivo: no bloquea, altera ni reenvía tráfico por el hecho de clasificarlo. La VPN productiva de FirewallDNS y sus decisiones DNS no se modifican durante esta etapa.
 
+## Estado de la entrega actual: informe unificado v3
+
+El servicio `EngineTunVpnService` ahora clasifica cada paquete que Android entrega a su TUN y agrega, en memoria acotada, contadores por familia IP, transporte, protocolo de aplicación, certeza y motivo. También informa bytes clasificados y latencia del clasificador P50/P95/P99. La clasificación ocurre antes de admitir el paquete en la cola, de modo que un paquete rechazado por saturación también queda reflejado en las métricas de protocolo. El informe exportado usa `schema_version: 3` e incluye dispositivo, rutas, cobertura y privacidad.
+
+**Límite que el propio informe declara:** el servicio sigue configurando solo las rutas DNS virtuales `/32` y `/128`. Por tanto, los contadores TCP/UDP describen únicamente paquetes que Android efectivamente entregue a esas rutas; no son una captura general ni un inventario de las conexiones de todas las aplicaciones. No hay seguimiento de flujos ni atribución UID todavía. No se habilitan rutas por defecto ni forwarding general en esta entrega.
+
 ## Estado de esta primera entrega
 
 Se incorpora `FirewallDnsTrafficClassifier`, un clasificador puro por paquete en el APK `:device-diagnostics`. Trabaja con bytes del paquete que el servicio diagnóstico ya haya recibido y devuelve etiquetas por capas:
