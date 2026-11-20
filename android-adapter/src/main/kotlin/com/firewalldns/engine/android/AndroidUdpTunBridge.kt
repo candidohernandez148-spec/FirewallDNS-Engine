@@ -59,7 +59,7 @@ class AndroidUdpTunBridge(
             }
         } catch (_: IOException) {
             return UdpTunPacketResult.REJECTED
-        } catch (_: IllegalStateException) {
+        } catch (_: RuntimeException) {
             return UdpTunPacketResult.REJECTED
         }
 
