@@ -38,16 +38,17 @@ class DnsTcpSessionWorker(
     private var outputBytes = 0
     @Volatile private var terminalReason: String? = null
 
-    private val worker = Thread(::runWorker, "FirewallDNS-DNS-TCP-session").apply {
-        isDaemon = true
-        start()
-    }
+    private val worker: Thread
 
     init {
         require(maxQueuedInputBytes > 0)
         require(maxQueuedInputChunks > 0)
         require(maxQueuedResponseBytes > 0)
         require(maxQueuedResponseFrames > 0)
+        worker = Thread(::runWorker, "FirewallDNS-DNS-TCP-session").apply {
+            isDaemon = true
+            start()
+        }
     }
 
     val isClosed: Boolean get() = closed.get()
