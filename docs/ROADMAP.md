@@ -73,3 +73,17 @@
 
 ## Criterio de salida global
 No integrar ni retirar el transporte actual hasta demostrar compatibilidad funcional, ausencia de fugas conocidas, estabilidad prolongada, falsos positivos aceptables y rendimiento igual o mejor en Samsung A34 5G y otros dispositivos de referencia.
+
+
+## Fase 8 — Diagnóstico integral unificado
+- [x] Definir una sola herramienta de diagnóstico y sus límites de cobertura.
+- [x] Añadir clasificador pasivo por capas para IPv4/IPv6, TCP/UDP/ICMP y firmas DNS/HTTP/TLS/QUIC.
+- [x] Separar certeza CONFIRMED/LIKELY/PORT_ONLY/UNKNOWN para evitar falsos positivos por número de puerto.
+- [ ] Integrar clasificación y contadores en tiempo real en el informe JSON unificado.
+- [ ] Implementar seguimiento de flujos con límites estrictos de memoria/TTL y causas de cierre.
+- [ ] Implementar atribución UID/paquete solo cuando Android lo permita, con redacción por defecto.
+- [ ] Implementar captura full-tunnel únicamente junto con reenvío TCP/UDP funcional y protección obligatoria de sockets.
+- [ ] Validar IPv4/IPv6, fragmentación, ICMP, Wi-Fi/datos, cambios de red y continuidad de conectividad en Samsung A34 5G.
+- [ ] Publicar el informe integral final con cobertura/exclusiones verificables y sin payload ni datos sensibles.
+
+La primera entrega del clasificador no implica que el TUN actual capture todo el dispositivo: `:device-diagnostics` sigue en modo DNS-only hasta que el reenvío full-tunnel supere sus puertas de seguridad. Ver [Diagnóstico integral de tráfico](INTEGRAL_TRAFFIC_DIAGNOSTIC.md).
