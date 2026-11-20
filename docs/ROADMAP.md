@@ -56,6 +56,7 @@
 - Evaluar stack probado frente a alternativas nativas.
 - [x] Procesamiento inicial de UDP DNS IPv4/IPv6 básico, checksum de respuestas y decisiones BLOCK/OBSERVE/ALLOW con pruebas unitarias.
 - [x] Preflight unificado IPv4/IPv6 TCP+UDP en Rust: longitudes, checksums, Data Offset, rechazo de fragmentos/extensiones no soportadas; API pura con pruebas host-side, todavía fuera de JNI y producción.
+- [x] Arnés host-side smoltcp TCP en IPv4: handshake cliente/servidor por colas TUN virtuales acotadas y entrega de frames DNS divididos/concatenados como stream; no conecta aún el decoder/políticas ni Android.
 - [ ] DNS-over-TCP del lado del cliente, fragmentación IP, cabeceras de extensión IPv6, MTU/fragmentación y demás protocolos mediante stack probado.
 - [ ] Integrar el plano de datos en FirewallDNS solo después de completar cobertura, pruebas de fuga/bucle y comparación de rendimiento.
 - Validar protect(), ausencia de bucles y DNS leaks.
