@@ -91,12 +91,16 @@ class DnsTcpSessionRegistry(
     }
 
     /** Called only by the TCP socket owner; returned frames remain in FIFO order. */
-    fun drainResponses(sessionId: Long, maxFrames: Int = DEFAULT_DRAIN_BATCH): List<ByteArray> {
-        val entry = synchronized(lock) { sessions[sessionId] } ?: return emptyList()
-        val frames = entry.worker.drainResponses(maxFrames)
-        if (entry.worker.isClosed) removeEntry(sessionId, entry)
-        return frames
-    }
+    fun drainResponses(sessionId: Long, maxFrames: Int = DEFAULT_DRAIN_BATCH): List<ByteArray> =
+        synchronized(lock) {
+            val entry = sessions[sessionId] ?: return@synchronized emptyList()
+            val frames = entry.worker.drainResponses(maxFrames)
+            if (frames.isNotEmpty()) entry.lastActivityNanos.set(nowNanos())
+            if (entry.worker.isClosed && sessions[sessionId] === entry) {
+                sessions.remove(sessionId)
+            }
+            frames
+        }
 
     /** FIN, RST, or transport teardown must close the matching session. */
     fun closeSession(sessionId: Long): Boolean {
@@ -129,12 +133,6 @@ class DnsTcpSessionRegistry(
         workers.forEach(DnsTcpSessionWorker::close)
     }
 
-    private fun removeEntry(sessionId: Long, expected: Entry) {
-        // The worker is already terminal when this method is called.
-        synchronized(lock) {
-            if (sessions[sessionId] === expected) sessions.remove(sessionId)
-        }
-    }
 
     private fun removeClosedLocked() {
         val iterator = sessions.iterator()
