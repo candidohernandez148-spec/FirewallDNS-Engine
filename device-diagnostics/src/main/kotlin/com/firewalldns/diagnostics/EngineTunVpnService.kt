@@ -172,11 +172,11 @@ class EngineTunVpnService : VpnService() {
                                     responsesOut.incrementAndGet()
                                     dnsProcessed.incrementAndGet()
                                 } catch (_: Throwable) {
-                                    responseWriteFailed.incrementAndGet()
+                                    responseWriteFailed.incrementAndGet()\n                                    diagnosticMetrics.recordProcessingOutcome("response_write_failed")
                                 }
                             }
                         } catch (_: java.util.concurrent.RejectedExecutionException) {
-                            queueRejected.incrementAndGet()
+                            queueRejected.incrementAndGet()\n                            diagnosticMetrics.recordProcessingOutcome("queue_rejected")
                         }
                     }
                 }
@@ -188,7 +188,7 @@ class EngineTunVpnService : VpnService() {
         }
     }
 
-    private fun startStatusPublisher() {
+    private fun noResponseReason(packet: ByteArray): String {\n        val classification = FirewallDnsTrafficClassifier.classify(packet)\n        return when {\n            classification.fragmented -> "ip_fragment_unsupported"\n            classification.network == "UNKNOWN" -> "malformed_or_unsupported_ip"\n            classification.transport != "UDP" -> "unsupported_transport"\n            classification.destinationPort != 53 -> "non_dns_udp_packet"\n            else -> "dns_rejected_cancelled_or_response_encoding_failed"\n        }\n    }\n\n    private fun startStatusPublisher() {
         statusPublisher?.shutdownNow()
         statusPublisher = Executors.newSingleThreadScheduledExecutor { task ->
             Thread(task, "firewalldns-engine-status").apply { isDaemon = true }
