@@ -139,7 +139,7 @@ fn smoltcp_tcp_connection_delivers_split_and_coalesced_dns_frames() {
     }
     let mut received = Vec::with_capacity(expected.len());
     let mut scratch = [0u8; 64];
-    let mut tick = 2001u64;
+    let mut tick = 2001i64;
     for _ in 0..200 {
         pump(
             Instant::from_millis(tick),
