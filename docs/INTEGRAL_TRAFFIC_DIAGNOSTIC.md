@@ -106,3 +106,15 @@ Los contadores y eventos visibles se publicarán en lotes acotados y oportunos. 
 ## Pruebas de la primera entrega
 
 `FirewallDnsTrafficClassifierTest` valida DNS UDP, HTTP en claro, TLS en puerto 443, DoT candidato, QUIC, falsos positivos por puerto 443, fragmentos, entradas truncadas y ausencia de payload en el resultado. Las pruebas sintéticas no acreditan captura integral ni reenvío en Android; esas puertas requieren la fase de transporte y el Samsung A34 5G.
+
+
+## Motivos terminales detallados del procesador DNS (aditivo al schema v3)
+
+El adaptador conserva la API `process()` por compatibilidad y añade `processDetailed()`. Cada paquete procesado termina en una respuesta o en una categoría explícita sin almacenar bytes, dominios ni direcciones:
+
+- Entrada/estructura: `invalid_packet_length`, `unsupported_ip_version`, cabeceras IPv4/IPv6 truncadas o longitudes inválidas.
+- Transporte: `unsupported_transport_tcp`, `unsupported_transport_other`, `ipv4_fragment_unsupported`, `ipv6_fragment_unsupported`, `ipv6_extension_header_unsupported`, `udp_header_truncated`, `udp_length_invalid`.
+- Enrutamiento DNS: `non_dns_udp_packet`, `dns_payload_too_short`, `dns_rejected`, `upstream_cancelled`.
+- Respuesta: `dns_blocked_response`, `dns_forwarded_response`, `upstream_failure_servfail`, `response_encoding_failed`, `response_written`, `response_write_failed`.
+
+Los contadores terminales proceden del mismo resultado detallado que procesa el paquete; ya no se deduce el motivo inspeccionando de nuevo el paquete. La clasificación sigue limitada a las rutas DNS virtuales del servicio de diagnóstico. No activa rutas por defecto ni forwarding TCP/UDP general.
