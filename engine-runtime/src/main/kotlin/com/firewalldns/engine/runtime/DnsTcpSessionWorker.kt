@@ -11,7 +11,7 @@ import java.util.concurrent.atomic.AtomicInteger
  * it never performs DNS policy evaluation or upstream network I/O.
  *
  * The host must call [close] when the TCP socket closes and provide
- * [cancelUpstream] that closes the active protected upstream socket. Response
+ * [cancelUpstream] that promptly closes the active protected upstream socket;\n * this callback must be non-blocking because queue overflow can invoke it from\n * the caller of [offer]. Response
  * frames are drained by the owner of the smoltcp SocketSet, never written to a
  * smoltcp socket from this worker.
  */
@@ -134,7 +134,11 @@ class DnsTcpSessionWorker(
                 } catch (_: InterruptedException) {
                     break
                 }
-                inputBytes.addAndGet(-chunk.size)
+                synchronized(inputLock) {
+                    if (closed.get()) break
+                    inputBytes.addAndGet(-chunk.size)
+                }
+                if (closed.get()) break
                 var result = processor.accept(chunk)
                 while (true) {
                     when (result) {
