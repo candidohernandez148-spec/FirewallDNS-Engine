@@ -34,6 +34,15 @@ class DnsTcpStreamDecoder(
     val isFailed: Boolean
         @Synchronized get() = failed
 
+    /** True only when a complete frame (or an invalid prefix) can be consumed now. */
+    val hasCompleteFrame: Boolean
+        @Synchronized get() {
+            if (failed || buffered < PREFIX_BYTES) return false
+            val messageLength = ((buffer[0].toInt() and 0xff) shl 8) or
+                (buffer[1].toInt() and 0xff)
+            return messageLength < DNS_HEADER_BYTES || buffered >= PREFIX_BYTES + messageLength
+        }
+
     /**
      * Appends a TCP stream fragment. Returns false on invalid ranges, terminal
      * framing failure, or capacity exhaustion; failure never mutates buffered data.

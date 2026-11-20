@@ -44,6 +44,22 @@ class DnsTcpStreamDecoderTest {
     }
 
     @Test
+    fun reportsOnlyFramesThatCanBeConsumedWithoutWaitingForMoreBytes() {
+        val frame = DnsTcpFrameCodec.encode(ByteArray(12))
+        val decoder = DnsTcpStreamDecoder()
+
+        assertTrue(decoder.append(frame, 0, frame.size - 1))
+        assertFalse(decoder.hasCompleteFrame)
+        assertTrue(decoder.append(frame, frame.size - 1, 1))
+        assertTrue(decoder.hasCompleteFrame)
+        assertIs<DnsTcpFrameDecode.Complete>(decoder.pollFrame())
+        assertFalse(decoder.hasCompleteFrame)
+
+        assertTrue(decoder.append(byteArrayOf(0, 11)))
+        assertTrue(decoder.hasCompleteFrame)
+    }
+
+    @Test
     fun rejectsCapacityOverflowAtomically() {
         val decoder = DnsTcpStreamDecoder(maxBufferedBytes = 64)
         val prefixAndPartial = byteArrayOf(0, 40, 1, 2, 3)
