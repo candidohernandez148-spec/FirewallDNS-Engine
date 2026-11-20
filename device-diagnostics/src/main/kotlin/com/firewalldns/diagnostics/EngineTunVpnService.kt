@@ -44,6 +44,7 @@ class EngineTunVpnService : VpnService() {
     private val responseWriteFailed = AtomicLong()
     private val stoppedBeforeResponse = AtomicLong()
     private val responsesOut = AtomicLong()
+    private val diagnosticMetrics = FirewallDnsDiagnosticMetrics()
 
     private fun droppedCount(): Long =
         processorNoResponse.get() + processorFailed.get() + queueRejected.get() +
@@ -70,6 +71,7 @@ class EngineTunVpnService : VpnService() {
         responseWriteFailed.set(0)
         stoppedBeforeResponse.set(0)
         responsesOut.set(0)
+        diagnosticMetrics.reset()
         startForeground(NOTIFICATION_ID, notification())
         try {
             val descriptor = Builder()
@@ -135,6 +137,9 @@ class EngineTunVpnService : VpnService() {
                         if (length < 0) break
                         if (length == 0) continue
                         packetsIn.incrementAndGet()
+                        // Classify every packet delivered by this TUN before queue admission,
+                        // so saturation is visible in the same protocol report.
+                        diagnosticMetrics.record(buffer, length)
                         val packet = buffer.copyOf(length)
                         try {
                             pool.execute {
@@ -144,19 +149,26 @@ class EngineTunVpnService : VpnService() {
                                 } catch (_: Throwable) {
                                     processorThrew = true
                                     processorFailed.incrementAndGet()
+                                    diagnosticMetrics.recordProcessingOutcome("processor_exception")
                                     null
                                 }
                                 if (response == null) {
                                     // A thrown exception is counted only as processor_failed.
                                     if (!processorThrew) {
-                                        if (running.get()) processorNoResponse.incrementAndGet()
-                                        else stoppedBeforeResponse.incrementAndGet()
+                                        if (running.get()) {
+                                            processorNoResponse.incrementAndGet()
+                                            diagnosticMetrics.recordProcessingOutcome(noResponseReason(packet))
+                                        } else {
+                                            stoppedBeforeResponse.incrementAndGet()
+                                            diagnosticMetrics.recordProcessingOutcome("stopped_before_response")
+                                        }
                                     }
                                     return@execute
                                 }
                                 processorReturnedResponse.incrementAndGet()
                                 if (!running.get()) {
                                     stoppedBeforeResponse.incrementAndGet()
+                                    diagnosticMetrics.recordProcessingOutcome("stopped_after_processor_response")
                                     return@execute
                                 }
                                 try {
@@ -168,10 +180,12 @@ class EngineTunVpnService : VpnService() {
                                     dnsProcessed.incrementAndGet()
                                 } catch (_: Throwable) {
                                     responseWriteFailed.incrementAndGet()
+                                    diagnosticMetrics.recordProcessingOutcome("response_write_failed")
                                 }
                             }
                         } catch (_: java.util.concurrent.RejectedExecutionException) {
                             queueRejected.incrementAndGet()
+                            diagnosticMetrics.recordProcessingOutcome("queue_rejected")
                         }
                     }
                 }
@@ -180,6 +194,17 @@ class EngineTunVpnService : VpnService() {
             } finally {
                 try { output.close() } catch (_: Throwable) {}
             }
+        }
+    }
+
+    private fun noResponseReason(packet: ByteArray): String {
+        val classification = FirewallDnsTrafficClassifier.classify(packet)
+        return when {
+            classification.fragmented -> "ip_fragment_unsupported"
+            classification.network == "UNKNOWN" -> "malformed_or_unsupported_ip"
+            classification.transport != "UDP" -> "unsupported_transport"
+            classification.destinationPort != 53 -> "non_dns_udp_packet"
+            else -> "dns_rejected_cancelled_or_response_encoding_failed"
         }
     }
 
@@ -211,6 +236,7 @@ class EngineTunVpnService : VpnService() {
                 .putExtra("observed", metrics?.observed ?: 0L)
                 .putExtra("allowed", metrics?.allowed ?: 0L)
                 .putExtra("rejected", metrics?.rejected ?: 0L)
+                .putExtra("traffic_classification", diagnosticMetrics.snapshotJson())
                 .putExtra("updated_at_elapsed_ms", android.os.SystemClock.elapsedRealtime()),
         )
     }
