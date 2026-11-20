@@ -79,10 +79,18 @@ class AndroidUdpTunBridge(
             }
 
             override fun onFailure(cause: IOException) {
-                val removed = synchronized(lock) { flows.remove(key) }
-                removed?.close()
+                removeFlow(key)
+            }
+
+            override fun onIdleTimeout() {
+                removeFlow(key)
             }
         })
+    }
+
+    private fun removeFlow(key: FlowKey) {
+        val removed = synchronized(lock) { flows.remove(key) }
+        removed?.close()
     }
 
     override fun close() {
