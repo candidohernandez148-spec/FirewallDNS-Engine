@@ -25,6 +25,15 @@
             </intent-filter>
         </service>
         <service
+            android:name=".UdpTunBridgeDiagnosticService"
+            android:exported="true"
+            android:permission="android.permission.BIND_VPN_SERVICE"
+            android:foregroundServiceType="systemExempted">
+            <intent-filter>
+                <action android:name="android.net.VpnService" />
+            </intent-filter>
+        </service>
+        <service
             android:name=".TunDiagnosticVpnService"
             android:exported="true"
             android:permission="android.permission.BIND_VPN_SERVICE"
