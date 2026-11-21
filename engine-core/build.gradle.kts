@@ -1,6 +1,6 @@
 plugins { kotlin("jvm") }
 
-kotlin { jvmToolchain(17) }
+kotlin { jvmToolchain(21) }
 
 dependencies {
     testImplementation(kotlin("test-junit5"))

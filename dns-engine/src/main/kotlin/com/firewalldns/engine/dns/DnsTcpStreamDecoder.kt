@@ -1,116 +1,122 @@
 package com.firewalldns.engine.dns
 
 /**
- * Bounded incremental accumulator for DNS-over-TCP messages.
- *
- * Feed bytes read from one TCP connection, then repeatedly call [pollFrame]
- * until [DnsTcpFrameDecode.Incomplete] is returned. The caller owns TCP
- * sequencing/retransmission and must keep one decoder per connection.
- *
- * The backing storage is allocated once and never grows. An append that would
- * exceed the configured budget is rejected atomically; no buffered bytes are
- * overwritten or discarded.
+ * Bounded, incremental RFC 1035 Section 4.2.2 DNS-over-TCP stream decoder.
+ * One instance belongs to a single TCP connection; there is no dynamic buffer growth.
  */
 class DnsTcpStreamDecoder(
-    private val maxBufferedBytes: Int = DEFAULT_MAX_BUFFERED_BYTES,
+    val bufferCapacity: Int = DEFAULT_BUFFER_CAPACITY,
+    val maxMessageBytes: Int = MAX_DNS_MESSAGE_BYTES,
 ) {
-    private val buffer: ByteArray
-    private var buffered = 0
-    private var failed = false
-
     init {
-        require(maxBufferedBytes >= MIN_FRAME_BYTES) {
-            "DNS TCP buffer must fit the two-byte prefix and DNS header"
+        require(maxMessageBytes in MIN_DNS_MESSAGE_BYTES..MAX_DNS_MESSAGE_BYTES) {
+            "maxMessageBytes must be in $MIN_DNS_MESSAGE_BYTES..$MAX_DNS_MESSAGE_BYTES"
         }
-        require(maxBufferedBytes <= MAX_ALLOWED_BUFFERED_BYTES) {
-            "DNS TCP buffer exceeds the configured hard limit"
+        require(bufferCapacity >= 2 + MIN_DNS_MESSAGE_BYTES) {
+            "bufferCapacity must hold at least a 2-byte prefix and a 12-byte DNS header"
         }
-        buffer = ByteArray(maxBufferedBytes)
     }
+
+    sealed interface FeedResult {
+        data class Accepted(val bufferedBytes: Int) : FeedResult
+        data object BufferFull : FeedResult
+        data class Failed(override val reason: String) : FailedResult, FeedResult
+    }
+
+    sealed interface DrainResult {
+        data class Frame(val message: ByteArray) : DrainResult
+        data object NeedMoreData : DrainResult
+        data class Failed(override val reason: String) : FailedResult, DrainResult
+    }
+
+    sealed interface FailedResult {
+        val reason: String
+    }
+
+    private val buffer = ByteArray(bufferCapacity)
+    private var size: Int = 0
+    private var terminalError: String? = null
 
     val bufferedBytes: Int
-        @Synchronized get() = buffered
+        get() = size
+
+    val failureReason: String?
+        get() = terminalError
 
     val isFailed: Boolean
-        @Synchronized get() = failed
+        get() = terminalError != null
 
-    /** True only when a complete frame (or an invalid prefix) can be consumed now. */
-    val hasCompleteFrame: Boolean
-        @Synchronized get() {
-            if (failed || buffered < PREFIX_BYTES) return false
-            val messageLength = ((buffer[0].toInt() and 0xff) shl 8) or
-                (buffer[1].toInt() and 0xff)
-            return messageLength < DNS_HEADER_BYTES || buffered >= PREFIX_BYTES + messageLength
-        }
+    fun remainingCapacity(): Int = if (terminalError != null) 0 else bufferCapacity - size
 
-    /**
-     * Appends a TCP stream fragment. Returns false on invalid ranges, terminal
-     * framing failure, or capacity exhaustion; failure never mutates buffered data.
-     */
-    @Synchronized
-    fun append(source: ByteArray, offset: Int = 0, length: Int = source.size - offset): Boolean {
-        if (failed || offset < 0 || length < 0 || offset > source.size - length) return false
-        if (length > buffer.size - buffered) return false
-        if (length > 0) {
-            source.copyInto(buffer, destinationOffset = buffered, startIndex = offset, endIndex = offset + length)
-            buffered += length
+    fun feed(chunk: ByteArray, offset: Int = 0, length: Int = chunk.size): FeedResult {
+        require(offset >= 0 && length >= 0 && offset + length <= chunk.size) {
+            "Invalid chunk slice: offset=$offset, length=$length, size=${chunk.size}"
         }
-        return true
+        terminalError?.let { return FeedResult.Failed(it) }
+        if (length == 0) return FeedResult.Accepted(size)
+        if (length > bufferCapacity - size) return FeedResult.BufferFull
+
+        chunk.copyInto(buffer, destinationOffset = size, startIndex = offset, endIndex = offset + length)
+        size += length
+        validatePendingHeader()?.let { error ->
+            terminalError = error
+            return FeedResult.Failed(error)
+        }
+        return FeedResult.Accepted(size)
     }
 
-    /**
-     * Extracts one complete DNS message. Call repeatedly to drain coalesced
-     * messages. Invalid framing makes this decoder terminal until [reset].
-     */
-    @Synchronized
-    fun pollFrame(): DnsTcpFrameDecode {
-        if (failed) return DnsTcpFrameDecode.Invalid("dns_tcp_stream_failed")
-        if (buffered < PREFIX_BYTES) return DnsTcpFrameDecode.Incomplete
+    fun drainFrame(): DrainResult {
+        terminalError?.let { return DrainResult.Failed(it) }
+        if (size < 2) return DrainResult.NeedMoreData
 
-        val messageLength = ((buffer[0].toInt() and 0xff) shl 8) or
-            (buffer[1].toInt() and 0xff)
-        if (messageLength < DNS_HEADER_BYTES) {
-            fail()
-            return DnsTcpFrameDecode.Invalid("dns_tcp_frame_too_short")
+        val frameLength = ((buffer[0].toInt() and 0xff) shl 8) or (buffer[1].toInt() and 0xff)
+        validateFrameLength(frameLength)?.let { error ->
+            terminalError = error
+            return DrainResult.Failed(error)
         }
+        val totalFrameBytes = 2 + frameLength
+        if (size < totalFrameBytes) return DrainResult.NeedMoreData
 
-        val frameLength = PREFIX_BYTES + messageLength
-        if (buffered < frameLength) return DnsTcpFrameDecode.Incomplete
-
-        val message = buffer.copyOfRange(PREFIX_BYTES, frameLength)
-        val remaining = buffered - frameLength
+        val frame = buffer.copyOfRange(2, totalFrameBytes)
+        val remaining = size - totalFrameBytes
         if (remaining > 0) {
-            buffer.copyInto(
-                destination = buffer,
-                destinationOffset = 0,
-                startIndex = frameLength,
-                endIndex = buffered,
-            )
+            buffer.copyInto(buffer, destinationOffset = 0, startIndex = totalFrameBytes, endIndex = size)
         }
-        buffer.fill(0, remaining, buffered)
-        buffered = remaining
-        return DnsTcpFrameDecode.Complete(message, frameLength)
+        size = remaining
+
+        validatePendingHeader()?.let { error ->
+            terminalError = error
+        }
+        return DrainResult.Frame(frame)
     }
 
-    /** Drops connection-local buffered bytes and permits reuse for a new flow. */
-    @Synchronized
+    fun hasCompleteFrame(): Boolean {
+        if (terminalError != null || size < 2) return false
+        val frameLength = ((buffer[0].toInt() and 0xff) shl 8) or (buffer[1].toInt() and 0xff)
+        return frameLength in MIN_DNS_MESSAGE_BYTES..maxMessageBytes && size >= 2 + frameLength
+    }
+
     fun reset() {
-        buffer.fill(0, 0, buffered)
-        buffered = 0
-        failed = false
+        size = 0
+        terminalError = null
+        buffer.fill(0)
     }
 
-    private fun fail() {
-        buffer.fill(0, 0, buffered)
-        buffered = 0
-        failed = true
+    private fun validatePendingHeader(): String? {
+        if (size < 2) return null
+        val frameLength = ((buffer[0].toInt() and 0xff) shl 8) or (buffer[1].toInt() and 0xff)
+        return validateFrameLength(frameLength)
     }
 
-    private companion object {
-        const val PREFIX_BYTES = 2
-        const val DNS_HEADER_BYTES = 12
-        const val MIN_FRAME_BYTES = PREFIX_BYTES + DNS_HEADER_BYTES
-        const val DEFAULT_MAX_BUFFERED_BYTES = 2 * (65_535 + PREFIX_BYTES)
-        const val MAX_ALLOWED_BUFFERED_BYTES = 1_048_576
+    private fun validateFrameLength(frameLength: Int): String? = when {
+        frameLength < MIN_DNS_MESSAGE_BYTES -> "dns_tcp_frame_too_short"
+        frameLength > maxMessageBytes -> "dns_tcp_frame_too_large"
+        else -> null
+    }
+
+    companion object {
+        const val MIN_DNS_MESSAGE_BYTES = 12
+        const val MAX_DNS_MESSAGE_BYTES = 65_535
+        const val DEFAULT_BUFFER_CAPACITY = 65_537
     }
 }

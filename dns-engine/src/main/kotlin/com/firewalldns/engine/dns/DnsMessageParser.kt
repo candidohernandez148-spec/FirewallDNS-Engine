@@ -22,7 +22,6 @@ sealed interface DnsParseResult {
 /**
  * Strict parser for a single-question DNS query.
  * Accepts no answer/authority records and at most one EDNS(0) OPT record.
- * Transport framing (UDP datagram or TCP length prefix) belongs to the adapter.
  */
 object DnsMessageParser {
     fun parse(packet: ByteArray): DnsParseResult {
@@ -79,9 +78,9 @@ object DnsMessageParser {
             if (u16(packet, offset) != TYPE_OPT) return invalid("dns_additional_record_unsupported")
             offset += 2
             ednsUdpPayloadSize = u16(packet, offset)
-            offset += 2 // UDP payload size
+            offset += 2
             ednsDnssecOk = u16(packet, offset + 2) and 0x8000 != 0
-            offset += 4 // Extended RCODE, version and flags
+            offset += 4
             val rdLength = u16(packet, offset)
             offset += 2
             val rdataEnd = offset + rdLength

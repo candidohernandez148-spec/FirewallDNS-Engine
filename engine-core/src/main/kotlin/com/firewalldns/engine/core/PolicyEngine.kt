@@ -7,7 +7,10 @@ import java.util.concurrent.atomic.AtomicReference
  * immutable snapshot and perform no disk/network I/O or lock acquisition.
  */
 class PolicyEngine(initialRules: Collection<PolicyRule> = emptyList()) {
-    private data class Snapshot(val revision: Long, val rules: List<CompiledRule>)
+    private data class Snapshot(
+        val revision: Long,
+        val rulesByDomain: Map<String, List<CompiledRule>>,
+    )
 
     private val snapshot = AtomicReference(Snapshot(0, compile(initialRules)))
 
@@ -34,17 +37,32 @@ class PolicyEngine(initialRules: Collection<PolicyRule> = emptyList()) {
                 policyRevision = current.revision,
             )
 
-        val winner = current.rules
-            .asSequence()
-            .filter { it.rule.enabled }
-            .filter { it.rule.expiresAtEpochMillis?.let { expiry -> expiry > nowEpochMillis } ?: true }
-            .filter { compiled ->
-                val requiredPackage = compiled.rule.appPackage
-                requiredPackage == null || requiredPackage == request.appPackage
+        var best: CompiledRule? = null
+        var idx = 0
+        var isExact = true
+        while (true) {
+            val suffix = if (idx == 0) domain else domain.substring(idx)
+            val bucket = current.rulesByDomain[suffix]
+            if (bucket != null) {
+                for (candidate in bucket) {
+                    if (best != null && candidate.rank >= best.rank) break
+                    if (!isExact && !candidate.rule.includeSubdomains) continue
+                    if (!candidate.rule.enabled) continue
+                    val expiry = candidate.rule.expiresAtEpochMillis
+                    if (expiry != null && expiry <= nowEpochMillis) continue
+                    val requiredPackage = candidate.rule.appPackage
+                    if (requiredPackage != null && requiredPackage != request.appPackage) continue
+                    best = candidate
+                    break
+                }
             }
-            .firstOrNull { it.matches(domain) }
+            val nextDot = domain.indexOf('.', idx)
+            if (nextDot < 0) break
+            idx = nextDot + 1
+            isExact = false
+        }
 
-        return winner?.let {
+        return best?.let {
             PolicyDecision(
                 action = it.rule.action,
                 reason = it.rule.reason,
@@ -60,18 +78,15 @@ class PolicyEngine(initialRules: Collection<PolicyRule> = emptyList()) {
         )
     }
 
-    private data class CompiledRule(
+    private class CompiledRule(
         val rule: PolicyRule,
         val normalizedDomain: String,
-    ) {
-        fun matches(domain: String): Boolean =
-            if (rule.includeSubdomains) domain == normalizedDomain || domain.endsWith(".$normalizedDomain")
-            else domain == normalizedDomain
-    }
+        val rank: Int,
+    )
 
-    private fun compile(input: Collection<PolicyRule>): List<CompiledRule> {
+    private fun compile(input: Collection<PolicyRule>): Map<String, List<CompiledRule>> {
         require(input.map { it.id }.distinct().size == input.size) { "Policy rule IDs must be unique" }
-        val compiled = input.map { rule ->
+        val prepared = input.map { rule ->
             require(rule.id.isNotBlank()) { "Policy rule ID must not be blank" }
             require(rule.reason.isNotBlank()) { "Policy rule reason must not be blank" }
             require(rule.source != RuleSource.HEURISTIC || rule.action != PolicyAction.BLOCK) {
@@ -88,16 +103,22 @@ class PolicyEngine(initialRules: Collection<PolicyRule> = emptyList()) {
                     "Invalid Android package name in policy rule '${rule.id}'"
                 }
             }
-            CompiledRule(rule, normalizedDomain)
-        }
-        return compiled.sortedWith(
-            compareByDescending<CompiledRule> { it.rule.priority }
-                .thenByDescending { it.rule.source.precedence }
-                .thenByDescending { it.normalizedDomain.length }
-                .thenByDescending { !it.rule.includeSubdomains }
-                .thenByDescending { it.rule.appPackage != null }
-                .thenBy { it.rule.id },
+            rule to normalizedDomain
+        }.sortedWith(
+            compareByDescending<Pair<PolicyRule, String>> { it.first.priority }
+                .thenByDescending { it.first.source.precedence }
+                .thenByDescending { it.second.length }
+                .thenByDescending { !it.first.includeSubdomains }
+                .thenByDescending { it.first.appPackage != null }
+                .thenBy { it.first.id },
         )
+
+        val indexed = HashMap<String, MutableList<CompiledRule>>(prepared.size)
+        prepared.forEachIndexed { index, (rule, normalizedDomain) ->
+            indexed.getOrPut(normalizedDomain) { ArrayList(1) }
+                .add(CompiledRule(rule, normalizedDomain, index))
+        }
+        return indexed
     }
 
     private companion object {

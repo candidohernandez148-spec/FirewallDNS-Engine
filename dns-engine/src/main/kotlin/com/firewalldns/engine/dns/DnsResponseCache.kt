@@ -4,15 +4,6 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.locks.ReentrantLock
 import kotlin.concurrent.withLock
 
-/**
- * Bounded in-memory cache for validated upstream DNS messages.
- *
- * Keys include the upstream endpoint and the complete query wire image, except
- * transaction ID and RD bit; CD remains part of the key. This avoids sharing
- * answers across EDNS options, client subnets, cookies, question casing, or other
- * query variants. Storage is bounded by entry count and total response bytes.
- * Expiration uses a monotonic nanosecond clock; no disk or network I/O occurs here.
- */
 class DnsResponseCache(
     private val maxEntries: Int = DEFAULT_MAX_ENTRIES,
     private val maxBytes: Int = DEFAULT_MAX_BYTES,
@@ -20,7 +11,6 @@ class DnsResponseCache(
 ) {
     private data class Entry(val response: ByteArray, val insertedAtNanos: Long, val ttlNanos: Long)
 
-    /** Content-based key avoids java.util.Base64, unavailable on Android API 24–25. */
     private class CacheKey(val upstream: String, query: ByteArray) {
         private val wireQuery = query.copyOf()
 
@@ -50,8 +40,7 @@ class DnsResponseCache(
         val response = cacheEntry.response.copyOf()
         putU16(response, 0, parsed.question.id)
         val flags = u16(response, 2)
-        putU16(response, 2, (flags and RD_MASK.inv()) or
-            (parsed.question.requestFlags and RD_MASK))
+        putU16(response, 2, (flags and RD_MASK.inv()) or (parsed.question.requestFlags and RD_MASK))
         parsed.question.wireQuestion.copyInto(response, DNS_HEADER_SIZE)
         if (!rewriteRemainingTtls(response, remainingSeconds)) return null
         return DnsUpstreamResponse(response, DnsUpstreamTransport.CACHE)
@@ -66,7 +55,6 @@ class DnsResponseCache(
         val parsed = DnsMessageParser.parse(query) as? DnsParseResult.Valid ?: return false
         if (response.size < DNS_HEADER_SIZE || u16(response, 0) != parsed.question.id) return false
         if ((u16(response, 2) and OPCODE_MASK) != (parsed.question.requestFlags and OPCODE_MASK)) return false
-        // Enforce the upstream structural contract at the cache boundary as well.
         if (DnsUpstreamResponseValidator.validate(response, parsed.question.wireQuestion) != null) return false
         val ttlSeconds = responseTtlSeconds(response, parsed.question.wireQuestion) ?: return false
         if (ttlSeconds <= 0L) return false
@@ -120,11 +108,6 @@ class DnsResponseCache(
         return CacheKey(upstream, canonical)
     }
 
-    /**
-     * Positive answers use the lowest answer RR TTL. NXDOMAIN and NODATA require
-     * an authority SOA and use min(SOA RR TTL, SOA.MINIMUM), per RFC 2308.
-     * Truncated, malformed, TTL=0 and non-cacheable response codes are misses.
-     */
     private fun responseTtlSeconds(message: ByteArray, expectedQuestion: ByteArray): Long? {
         if (message.size < DNS_HEADER_SIZE || message.size > MAX_DNS_MESSAGE_SIZE) return null
         val flags = u16(message, 2)
@@ -197,7 +180,6 @@ class DnsResponseCache(
             val rdataStart = nameEnd + RR_FIXED_SIZE
             val rdataEnd = rdataStart + rdataLength
             if (rdataEnd < rdataStart || rdataEnd > message.size) return false
-            // OPT's TTL field contains extended RCODE/version/flags, not a TTL.
             if (type != TYPE_OPT) putU32(message, nameEnd + 4, minOf(u32(message, nameEnd + 4), remainingSeconds))
             offset = rdataEnd
         }
@@ -212,7 +194,6 @@ class DnsResponseCache(
         return u32(message, secondNameEnd + 16)
     }
 
-    /** Skip a possibly compressed DNS name and return the first byte after its encoding. */
     private fun skipName(message: ByteArray, start: Int): Int? {
         if (start !in message.indices) return null
         var cursor = start

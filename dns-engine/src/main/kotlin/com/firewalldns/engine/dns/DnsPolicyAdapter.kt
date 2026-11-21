@@ -39,7 +39,9 @@ class DnsPolicyAdapter(
                 monitor.recordRejected("dns_qname_invalid_hostname", nowEpochMillis)
                 return DnsEvaluation.Rejected("dns_qname_invalid_hostname")
             }
-        val cacheKey = DnsDecisionCacheKey(normalizedDomain, appPackage, policyEngine.revision)
+        val policyRevision = policyEngine.revision
+        val threatRevision = threatAnalyzer.revision
+        val cacheKey = DnsDecisionCacheKey(normalizedDomain, appPackage, policyRevision, threatRevision)
         val cachedDecision = decisionCache.get(cacheKey, nowEpochMillis)
         if (cachedDecision != null) monitor.recordCacheHit() else monitor.recordCacheMiss()
         val decision = cachedDecision ?: run {
@@ -59,7 +61,7 @@ class DnsPolicyAdapter(
                 policyDecision
             }
             decisionCache.put(
-                DnsDecisionCacheKey(normalizedDomain, appPackage, effectiveDecision.policyRevision),
+                DnsDecisionCacheKey(normalizedDomain, appPackage, effectiveDecision.policyRevision, threatRevision),
                 effectiveDecision,
                 nowEpochMillis,
             )
@@ -83,7 +85,6 @@ class DnsPolicyAdapter(
         } ?: byteArrayOf()
         val response = ByteArray(12 + question.wireQuestion.size + opt.size)
         putU16(response, 0, question.id)
-        // QR + preserve RD and CD + NXDOMAIN. RA is not asserted by this local synthesizer.
         val flags = 0x8000 or (question.requestFlags and (0x0100 or 0x0010)) or 0x0003
         putU16(response, 2, flags)
         putU16(response, 4, 1)

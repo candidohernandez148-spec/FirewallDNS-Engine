@@ -8,16 +8,11 @@ data class DnsDecisionCacheKey(
     val domain: String,
     val appPackage: String?,
     val policyRevision: Long,
+    val threatRevision: Long = 0L,
 )
 
 /**
  * Bounded, non-blocking decision cache.
- *
- * Reads and writes use concurrent primitives only: this cache is consulted on
- * the DNS decision path, so it must never wait for a monitor or disk operation.
- * Entries are scoped to a policy snapshot and expire no later than either the
- * cache TTL or the matched rule's expiry. Under contention eviction is
- * best-effort, while the atomic reservation keeps the entry count bounded.
  */
 class DnsDecisionCache(
     private val maxEntries: Int = DEFAULT_MAX_ENTRIES,
@@ -58,8 +53,6 @@ class DnsDecisionCache(
             }
 
             if (entryCount.get() >= maxEntries) {
-                // Reclaim expired entries only under capacity pressure; normal
-                // cache misses must not scan the entire map on the DNS hot path.
                 entries.entries.forEach { (entryKey, entry) ->
                     if (entry.expiresAtEpochMillis <= nowEpochMillis &&
                         entries.remove(entryKey, entry)
@@ -79,7 +72,6 @@ class DnsDecisionCache(
             val previous = entries.putIfAbsent(key, replacement)
             if (previous == null) return
 
-            // Another writer inserted the same key after our initial lookup.
             entryCount.decrementAndGet()
             entries.replace(key, previous, replacement)
             return
@@ -87,7 +79,6 @@ class DnsDecisionCache(
     }
 
     fun clear() {
-        // Remove conditionally so concurrent puts are not erased from the count.
         entries.entries.forEach { (key, entry) ->
             if (entries.remove(key, entry)) entryCount.decrementAndGet()
         }

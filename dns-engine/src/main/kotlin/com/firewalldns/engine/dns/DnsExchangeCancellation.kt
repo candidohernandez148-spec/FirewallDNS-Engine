@@ -1,36 +1,41 @@
 package com.firewalldns.engine.dns
 
 import java.io.Closeable
+import java.util.Collections
 import java.util.concurrent.atomic.AtomicBoolean
-import java.util.concurrent.atomic.AtomicReference
 
-/**
- * Per-exchange cancellation scope. Cancelling closes the active socket to unblock
- * UDP receive and TCP connect/read. Create one instance per exchange.
- */
+/** Cooperative per-exchange cancellation scope that closes active sockets immediately. */
 class DnsExchangeCancellation {
     private val cancelled = AtomicBoolean(false)
-    private val activeSocket = AtomicReference<Closeable?>(null)
+    private val activeResources: MutableSet<Closeable> =
+        Collections.synchronizedSet(linkedSetOf())
 
-    val isCancelled: Boolean get() = cancelled.get()
+    val isCancelled: Boolean
+        get() = cancelled.get()
 
-    fun cancel() {
-        if (cancelled.compareAndSet(false, true)) {
-            runCatching { activeSocket.getAndSet(null)?.close() }
-        }
-    }
-
-    internal fun register(socket: Closeable): Boolean {
-        if (cancelled.get()) return false
-        activeSocket.set(socket)
-        if (cancelled.get() && activeSocket.compareAndSet(socket, null)) {
-            runCatching { socket.close() }
+    fun register(resource: Closeable): Boolean {
+        if (cancelled.get()) {
+            runCatching { resource.close() }
             return false
         }
-        return !cancelled.get()
+        activeResources.add(resource)
+        if (cancelled.get()) {
+            activeResources.remove(resource)
+            runCatching { resource.close() }
+            return false
+        }
+        return true
     }
 
-    internal fun unregister(socket: Closeable) {
-        activeSocket.compareAndSet(socket, null)
+    fun unregister(resource: Closeable) {
+        activeResources.remove(resource)
+    }
+
+    fun cancel() {
+        if (!cancelled.compareAndSet(false, true)) return
+        val snapshot = synchronized(activeResources) {
+            activeResources.toList().also { activeResources.clear() }
+        }
+        snapshot.forEach { runCatching { it.close() } }
     }
 }

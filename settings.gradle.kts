@@ -7,12 +7,13 @@ pluginManagement {
 }
 
 rootProject.name = "FirewallDNS-Engine"
+
 include(
     ":engine-core",
-    ":dns-engine",
     ":threat-engine",
     ":engine-monitor",
+    ":dns-engine",
     ":engine-runtime",
     ":android-adapter",
-    ":device-diagnostics",
+    ":app",
 )

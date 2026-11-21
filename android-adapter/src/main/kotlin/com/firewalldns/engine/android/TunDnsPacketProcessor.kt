@@ -1,22 +1,50 @@
 package com.firewalldns.engine.android
 
 import com.firewalldns.engine.dns.DnsEvaluation
+import com.firewalldns.engine.dns.DnsExchangeCancellation
 import com.firewalldns.engine.dns.DnsUpstreamResult
 import com.firewalldns.engine.runtime.EngineRuntime
 
-/**
- * DNS-only TUN data-plane adapter.
- *
- * The VPN host must route only its virtual DNS addresses to the TUN. This adapter
- * deliberately does not pretend to forward arbitrary IP traffic or implement TCP.
- * Upstream exchanges are synchronous and MUST be invoked on a bounded I/O worker,
- * never on the TUN reader thread.
- */
-class TunDnsPacketProcessor(
+class TunDnsPacketProcessor private constructor(
     private val engine: EngineRuntime,
     private val maxDnsPayloadBytes: Int = 1232,
-    private val exchangeUpstream: (ByteArray) -> DnsUpstreamResult,
+    private val appIdentityResolver: AppIdentityResolver = NoopAppIdentityResolver,
+    private val flowTracker: TunFlowTracker? = null,
+    private val exchangeUpstreamWithCancel: (ByteArray, DnsExchangeCancellation) -> DnsUpstreamResult,
 ) {
+    constructor(
+        engine: EngineRuntime,
+        maxDnsPayloadBytes: Int = 1232,
+        exchangeUpstream: (ByteArray) -> DnsUpstreamResult,
+    ) : this(
+        engine = engine,
+        maxDnsPayloadBytes = maxDnsPayloadBytes,
+        appIdentityResolver = NoopAppIdentityResolver,
+        flowTracker = null,
+        exchangeUpstreamWithCancel = { query, _ -> exchangeUpstream(query) },
+    )
+
+    companion object {
+        fun withCancellation(
+            engine: EngineRuntime,
+            maxDnsPayloadBytes: Int = 1232,
+            appIdentityResolver: AppIdentityResolver = NoopAppIdentityResolver,
+            flowTracker: TunFlowTracker? = null,
+            exchangeUpstream: (ByteArray, DnsExchangeCancellation) -> DnsUpstreamResult,
+        ): TunDnsPacketProcessor = TunDnsPacketProcessor(
+            engine = engine,
+            maxDnsPayloadBytes = maxDnsPayloadBytes,
+            appIdentityResolver = appIdentityResolver,
+            flowTracker = flowTracker,
+            exchangeUpstreamWithCancel = exchangeUpstream,
+        )
+
+        private const val DNS_PORT = 53
+        private const val IPPROTO_UDP = 17
+        private const val IPPROTO_TCP = 6
+        private val IPV6_EXTENSION_HEADERS = setOf(0, 43, 44, 51, 60)
+    }
+
     init {
         require(maxDnsPayloadBytes in 512..4096)
     }
@@ -26,18 +54,37 @@ class TunDnsPacketProcessor(
         data class NoResponse(val reason: String) : PacketResult
     }
 
-    /** Compatibility API. Detailed callers should use processDetailed() to retain the terminal reason. */
     fun process(packet: ByteArray, length: Int = packet.size): ByteArray? =
         (processDetailed(packet, length) as? PacketResult.Response)?.packet
 
-    /** Returns a payload-free terminal reason when the packet cannot be answered. */
-    fun processDetailed(packet: ByteArray, length: Int = packet.size): PacketResult {
+    fun processDetailed(
+        packet: ByteArray,
+        length: Int = packet.size,
+        cancellation: DnsExchangeCancellation = DnsExchangeCancellation(),
+    ): PacketResult {
         val decoded = decodeDetailed(packet, length)
         val request = when (decoded) {
             is DecodeResult.Valid -> decoded.request
             is DecodeResult.Invalid -> return PacketResult.NoResponse(decoded.reason)
         }
-        val evaluation = engine.evaluateDns(request.dns)
+        val appPackage = appIdentityResolver.resolveAppPackage(
+            protocol = IPPROTO_UDP,
+            sourceAddress = request.sourceAddress,
+            sourcePort = request.sourcePort,
+            destinationAddress = request.destinationAddress,
+            destinationPort = request.destinationPort,
+        )
+        val flowKey = flowTracker?.let {
+            TunFlowTracker.FlowKey(
+                protocol = IPPROTO_UDP,
+                ipv6 = request.ipv6,
+                clientAddress = request.sourceAddress,
+                clientPort = request.sourcePort,
+                serverAddress = request.destinationAddress,
+                serverPort = request.destinationPort,
+            )
+        }
+        val evaluation = engine.evaluateDns(request.dns, appPackage)
         val response: ByteArray
         val responseOutcome: String
         when (evaluation) {
@@ -45,7 +92,7 @@ class TunDnsPacketProcessor(
                 response = evaluation.response
                 responseOutcome = "dns_blocked_response"
             }
-            is DnsEvaluation.Forward -> when (val upstream = exchangeUpstream(request.dns)) {
+            is DnsEvaluation.Forward -> when (val upstream = exchangeUpstreamWithCancel(request.dns, cancellation)) {
                 is DnsUpstreamResult.Success -> {
                     response = upstream.response.message
                     responseOutcome = "dns_forwarded_response"
@@ -56,11 +103,22 @@ class TunDnsPacketProcessor(
                 }
                 DnsUpstreamResult.Cancelled -> return PacketResult.NoResponse("upstream_cancelled")
             }
-            is DnsEvaluation.Rejected -> return PacketResult.NoResponse("dns_rejected")
+            is DnsEvaluation.Rejected -> {
+                if (flowKey != null) {
+                    flowTracker.recordPacket(flowKey, inBytes = length, outBytes = 0, appPackage = appPackage)
+                }
+                return PacketResult.NoResponse("dns_rejected")
+            }
         }
         val bounded = if (response.size > maxDnsPayloadBytes) truncated(evaluation, response) else response
         val encoded = encodeResponse(request, bounded)
             ?: return PacketResult.NoResponse("response_encoding_failed")
+        if (flowKey != null) {
+            flowTracker.recordPacket(flowKey, inBytes = length, outBytes = encoded.size, appPackage = appPackage)
+            if (evaluation is DnsEvaluation.Blocked) {
+                flowTracker.closeFlow(flowKey, FlowCloseReason.POLICY_BLOCKED)
+            }
+        }
         return PacketResult.Response(encoded, responseOutcome)
     }
 
@@ -95,6 +153,7 @@ class TunDnsPacketProcessor(
         if (headerLength < 20 || headerLength > length) return DecodeResult.Invalid("ipv4_header_length_invalid")
         val totalLength = u16(packet, 2)
         if (totalLength < headerLength || totalLength > length) return DecodeResult.Invalid("ipv4_total_length_invalid")
+        if (internetChecksum(packet, 0, headerLength) != 0) return DecodeResult.Invalid("ipv4_header_checksum_invalid")
         val protocol = packet[9].toInt() and 0xff
         if (protocol != IPPROTO_UDP) {
             return DecodeResult.Invalid(if (protocol == IPPROTO_TCP) "unsupported_transport_tcp" else "unsupported_transport_other")
@@ -108,19 +167,47 @@ class TunDnsPacketProcessor(
     private fun decodeIpv6(packet: ByteArray, length: Int): DecodeResult {
         if (length < 40) return DecodeResult.Invalid("ipv6_header_truncated")
         val payloadLength = u16(packet, 4)
-        if (payloadLength == 0 || 40 + payloadLength > length) return DecodeResult.Invalid("ipv6_payload_length_invalid")
-        val nextHeader = packet[6].toInt() and 0xff
+        val packetEnd = 40 + payloadLength
+        if (payloadLength == 0 || packetEnd > length) return DecodeResult.Invalid("ipv6_payload_length_invalid")
+
+        var nextHeader = packet[6].toInt() and 0xff
+        var offset = 40
+        var extensions = 0
+        while (nextHeader in IPV6_EXTENSION_HEADERS) {
+            if (++extensions > 8) return DecodeResult.Invalid("ipv6_extension_chain_too_long")
+            if (nextHeader == 44) {
+                if (offset + 8 > packetEnd) return DecodeResult.Invalid("ipv6_fragment_header_truncated")
+                val fragmentField = u16(packet, offset + 2)
+                if ((fragmentField and 0xfff9) != 0) {
+                    return DecodeResult.Invalid("ipv6_fragment_unsupported")
+                }
+                nextHeader = packet[offset].toInt() and 0xff
+                offset += 8
+                continue
+            }
+            if (offset + 2 > packetEnd) return DecodeResult.Invalid("ipv6_extension_header_truncated")
+            val following = packet[offset].toInt() and 0xff
+            val extLen = if (nextHeader == 51) {
+                ((packet[offset + 1].toInt() and 0xff) + 2) * 4
+            } else {
+                ((packet[offset + 1].toInt() and 0xff) + 1) * 8
+            }
+            if (extLen < 8 || offset + extLen > packetEnd) {
+                return DecodeResult.Invalid("ipv6_extension_length_invalid")
+            }
+            nextHeader = following
+            offset += extLen
+        }
+
         if (nextHeader != IPPROTO_UDP) {
             val reason = when (nextHeader) {
                 IPPROTO_TCP -> "unsupported_transport_tcp"
-                44 -> "ipv6_fragment_unsupported"
-                0, 43, 51, 60 -> "ipv6_extension_header_unsupported"
                 else -> "unsupported_transport_other"
             }
             return DecodeResult.Invalid(reason)
         }
-        if (payloadLength < 8) return DecodeResult.Invalid("udp_header_truncated")
-        return decodeUdp(packet, length, true, 40, 40 + payloadLength,
+        if (offset + 8 > packetEnd) return DecodeResult.Invalid("udp_header_truncated")
+        return decodeUdp(packet, length, true, offset, packetEnd,
             packet.copyOfRange(8, 24), packet.copyOfRange(24, 40))
     }
 
@@ -138,20 +225,30 @@ class TunDnsPacketProcessor(
         if (udpLength < 8 || ipHeaderLength + udpLength != packetEnd || packetEnd > length) {
             return DecodeResult.Invalid("udp_length_invalid")
         }
+        val incomingChecksum = u16(packet, ipHeaderLength + 6)
+        if (ipv6 && incomingChecksum == 0) {
+            return DecodeResult.Invalid("udp_checksum_zero_ipv6")
+        }
+        if (incomingChecksum != 0 &&
+            udpChecksum(ipv6, sourceAddress, destinationAddress, packet, ipHeaderLength, udpLength) != 0
+        ) {
+            return DecodeResult.Invalid("udp_checksum_invalid")
+        }
         val sourcePort = u16(packet, ipHeaderLength)
         val destinationPort = u16(packet, ipHeaderLength + 2)
         if (destinationPort != DNS_PORT) return DecodeResult.Invalid("non_dns_udp_packet")
         if (udpLength < 8 + 12) return DecodeResult.Invalid("dns_payload_too_short")
+        val baseIpHeaderLen = if (ipv6) 40 else ipHeaderLength
         return DecodeResult.Valid(
             Request(
                 ipv6 = ipv6,
-                ipHeaderLength = ipHeaderLength,
+                ipHeaderLength = baseIpHeaderLen,
                 sourceAddress = sourceAddress,
                 destinationAddress = destinationAddress,
                 sourcePort = sourcePort,
                 destinationPort = destinationPort,
                 dns = packet.copyOfRange(ipHeaderLength + 8, ipHeaderLength + udpLength),
-                originalHeader = packet.copyOfRange(0, ipHeaderLength),
+                originalHeader = packet.copyOfRange(0, baseIpHeaderLen),
             ),
         )
     }
@@ -159,19 +256,22 @@ class TunDnsPacketProcessor(
     private fun encodeResponse(request: Request, dns: ByteArray): ByteArray? {
         val udpLength = 8 + dns.size
         val ipLength = request.ipHeaderLength + udpLength
-        if (ipLength > 65_535 || (!request.ipv6 && ipLength > 65_535)) return null
+        if (ipLength > 65_535) return null
         val output = ByteArray(ipLength)
         request.originalHeader.copyInto(output)
         if (request.ipv6) {
             request.destinationAddress.copyInto(output, 8)
             request.sourceAddress.copyInto(output, 24)
             putU16(output, 4, udpLength)
+            output[6] = IPPROTO_UDP.toByte()
             output[7] = 64
         } else {
             request.destinationAddress.copyInto(output, 12)
             request.sourceAddress.copyInto(output, 16)
             putU16(output, 2, ipLength)
+            putU16(output, 6, 0)
             output[8] = 64
+            output[9] = IPPROTO_UDP.toByte()
             putU16(output, 10, 0)
         }
         val udpOffset = request.ipHeaderLength
@@ -273,11 +373,5 @@ class TunDnsPacketProcessor(
     private fun putU16(data: ByteArray, offset: Int, value: Int) {
         data[offset] = (value ushr 8).toByte()
         data[offset + 1] = value.toByte()
-    }
-
-    private companion object {
-        const val DNS_PORT = 53
-        const val IPPROTO_UDP = 17
-        const val IPPROTO_TCP = 6
     }
 }

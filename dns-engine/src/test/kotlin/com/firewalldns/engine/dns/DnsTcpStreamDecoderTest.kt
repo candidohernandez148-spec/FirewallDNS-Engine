@@ -1,107 +1,97 @@
 package com.firewalldns.engine.dns
 
-import kotlin.test.Test
-import kotlin.test.assertContentEquals
-import kotlin.test.assertEquals
-import kotlin.test.assertFalse
-import kotlin.test.assertIs
-import kotlin.test.assertTrue
+import org.junit.jupiter.api.Assertions.assertArrayEquals
+import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.Test
 
 class DnsTcpStreamDecoderTest {
+
     @Test
-    fun accumulatesSplitPrefixAndSplitMessageBody() {
-        val message = ByteArray(24) { (it + 1).toByte() }
-        val frame = DnsTcpFrameCodec.encode(message)
-        val decoder = DnsTcpStreamDecoder()
+    fun decodesSplitPrefixSplitBodyAndConcatenatedFrames() {
+        val decoder = DnsTcpStreamDecoder(bufferCapacity = 256)
+        val q1 = dummyDnsQuery("one.example", id = 0x1122)
+        val q2 = dummyDnsQuery("two.example", id = 0x3344)
+        val framed1 = DnsTcpFrameCodec.encode(q1)
+        val framed2 = DnsTcpFrameCodec.encode(q2)
 
-        assertTrue(decoder.append(frame, 0, 1))
-        assertIs<DnsTcpFrameDecode.Incomplete>(decoder.pollFrame())
-        assertTrue(decoder.append(frame, 1, 2))
-        assertIs<DnsTcpFrameDecode.Incomplete>(decoder.pollFrame())
-        assertTrue(decoder.append(frame, 3, frame.size - 3))
+        // Split 2-byte length prefix one byte at a time
+        assertTrue(decoder.feed(byteArrayOf(framed1[0])) is DnsTcpStreamDecoder.FeedResult.Accepted)
+        assertTrue(decoder.drainFrame() is DnsTcpStreamDecoder.DrainResult.NeedMoreData)
 
-        val decoded = assertIs<DnsTcpFrameDecode.Complete>(decoder.pollFrame())
-        assertContentEquals(message, decoded.message)
-        assertEquals(frame.size, decoded.consumedBytes)
+        assertTrue(decoder.feed(byteArrayOf(framed1[1])) is DnsTcpStreamDecoder.FeedResult.Accepted)
+        assertTrue(decoder.drainFrame() is DnsTcpStreamDecoder.DrainResult.NeedMoreData)
+
+        // Partial body + rest of frame1 concatenated with frame2
+        val splitPoint = 2 + 8
+        assertTrue(decoder.feed(framed1, offset = 2, length = 8) is DnsTcpStreamDecoder.FeedResult.Accepted)
+        assertTrue(decoder.drainFrame() is DnsTcpStreamDecoder.DrainResult.NeedMoreData)
+
+        val tailAndSecond = framed1.copyOfRange(splitPoint, framed1.size) + framed2
+        assertTrue(decoder.feed(tailAndSecond) is DnsTcpStreamDecoder.FeedResult.Accepted)
+
+        val out1 = decoder.drainFrame() as DnsTcpStreamDecoder.DrainResult.Frame
+        val out2 = decoder.drainFrame() as DnsTcpStreamDecoder.DrainResult.Frame
+        assertArrayEquals(q1, out1.message)
+        assertArrayEquals(q2, out2.message)
+        assertTrue(decoder.drainFrame() is DnsTcpStreamDecoder.DrainResult.NeedMoreData)
         assertEquals(0, decoder.bufferedBytes)
     }
 
     @Test
-    fun drainsMultipleCoalescedMessagesInOrder() {
-        val first = ByteArray(12) { 0x11 }
-        val second = ByteArray(32) { 0x22 }
-        val third = ByteArray(15) { 0x33 }
-        val decoder = DnsTcpStreamDecoder()
+    fun rejectsBufferOverflowAtomicallyWithoutCorruptingPendingBytes() {
+        val decoder = DnsTcpStreamDecoder(bufferCapacity = 40)
+        val q = dummyDnsQuery("ok.example", id = 1)
+        val framed = DnsTcpFrameCodec.encode(q)
+        val firstHalf = framed.copyOfRange(0, 12)
+        assertTrue(decoder.feed(firstHalf) is DnsTcpStreamDecoder.FeedResult.Accepted)
+        assertEquals(28, decoder.remainingCapacity())
 
-        assertTrue(decoder.append(
-            DnsTcpFrameCodec.encode(first) + DnsTcpFrameCodec.encode(second) + DnsTcpFrameCodec.encode(third)
-        ))
-        assertContentEquals(first, assertIs<DnsTcpFrameDecode.Complete>(decoder.pollFrame()).message)
-        assertContentEquals(second, assertIs<DnsTcpFrameDecode.Complete>(decoder.pollFrame()).message)
-        assertContentEquals(third, assertIs<DnsTcpFrameDecode.Complete>(decoder.pollFrame()).message)
-        assertIs<DnsTcpFrameDecode.Incomplete>(decoder.pollFrame())
-        assertEquals(0, decoder.bufferedBytes)
+        // Oversized chunk exceeding remaining capacity must fail atomically
+        val oversized = ByteArray(29) { 0x42 }
+        assertEquals(DnsTcpStreamDecoder.FeedResult.BufferFull, decoder.feed(oversized))
+        assertEquals(12, decoder.bufferedBytes)
+        assertFalse(decoder.isFailed)
+
+        // Feeding remaining valid bytes still decodes cleanly
+        assertTrue(decoder.feed(framed, 12, framed.size - 12) is DnsTcpStreamDecoder.FeedResult.Accepted)
+        val decoded = decoder.drainFrame() as DnsTcpStreamDecoder.DrainResult.Frame
+        assertArrayEquals(q, decoded.message)
     }
 
     @Test
-    fun reportsOnlyFramesThatCanBeConsumedWithoutWaitingForMoreBytes() {
-        val frame = DnsTcpFrameCodec.encode(ByteArray(12))
-        val decoder = DnsTcpStreamDecoder()
+    fun entersTerminalErrorOnInvalidFrameLengthAndClearsOnReset() {
+        val decoder = DnsTcpStreamDecoder(bufferCapacity = 128, maxMessageBytes = 64)
 
-        assertTrue(decoder.append(frame, 0, frame.size - 1))
-        assertFalse(decoder.hasCompleteFrame)
-        assertTrue(decoder.append(frame, frame.size - 1, 1))
-        assertTrue(decoder.hasCompleteFrame)
-        assertIs<DnsTcpFrameDecode.Complete>(decoder.pollFrame())
-        assertFalse(decoder.hasCompleteFrame)
-
-        assertTrue(decoder.append(byteArrayOf(0, 11)))
-        assertTrue(decoder.hasCompleteFrame)
-    }
-
-    @Test
-    fun rejectsCapacityOverflowAtomically() {
-        val decoder = DnsTcpStreamDecoder(maxBufferedBytes = 64)
-        val prefixAndPartial = byteArrayOf(0, 40, 1, 2, 3)
-        assertTrue(decoder.append(prefixAndPartial))
-        val before = decoder.bufferedBytes
-
-        assertFalse(decoder.append(ByteArray(60)))
-        assertEquals(before, decoder.bufferedBytes)
-        assertIs<DnsTcpFrameDecode.Incomplete>(decoder.pollFrame())
-    }
-
-    @Test
-    fun invalidLengthPoisonsDecoderUntilReset() {
-        val decoder = DnsTcpStreamDecoder()
-        assertTrue(decoder.append(byteArrayOf(0, 11)))
-        assertIs<DnsTcpFrameDecode.Invalid>(decoder.pollFrame())
+        // Frame length 11 (< 12 minimum DNS header)
+        val tooShort = decoder.feed(byteArrayOf(0x00, 0x0b, 0x01, 0x02))
+        assertTrue(tooShort is DnsTcpStreamDecoder.FeedResult.Failed)
+        assertEquals("dns_tcp_frame_too_short", (tooShort as DnsTcpStreamDecoder.FeedResult.Failed).reason)
         assertTrue(decoder.isFailed)
-        assertFalse(decoder.append(DnsTcpFrameCodec.encode(ByteArray(12))))
-        assertIs<DnsTcpFrameDecode.Invalid>(decoder.pollFrame())
+        assertEquals(0, decoder.remainingCapacity())
 
         decoder.reset()
         assertFalse(decoder.isFailed)
-        assertTrue(decoder.append(DnsTcpFrameCodec.encode(ByteArray(12))))
-        assertIs<DnsTcpFrameDecode.Complete>(decoder.pollFrame())
+        assertEquals(128, decoder.remainingCapacity())
+
+        // Frame length > maxMessageBytes (65 > 64)
+        val tooLarge = decoder.feed(byteArrayOf(0x00, 0x41))
+        assertTrue(tooLarge is DnsTcpStreamDecoder.FeedResult.Failed)
+        assertEquals("dns_tcp_frame_too_large", (tooLarge as DnsTcpStreamDecoder.FeedResult.Failed).reason)
     }
 
-    @Test
-    fun supportsMaximumDnsTcpMessageLength() {
-        val message = ByteArray(65_535) { 0x5a }
-        val frame = DnsTcpFrameCodec.encode(message)
-        val decoder = DnsTcpStreamDecoder()
-
-        assertTrue(decoder.append(frame))
-        val decoded = assertIs<DnsTcpFrameDecode.Complete>(decoder.pollFrame())
-        assertContentEquals(message, decoded.message)
-    }
-
-    @Test
-    fun rejectsInvalidAppendRangesWithoutChangingState() {
-        val decoder = DnsTcpStreamDecoder()
-        assertFalse(decoder.append(byteArrayOf(1, 2), offset = -1, length = 1))
-        assertFalse(decoder.append(byteArrayOf(1, 2), offset = 1, length = 2))
-        assertEquals(0, decoder.bufferedBytes)
+    private fun dummyDnsQuery(domain: String, id: Int): ByteArray {
+        val labels = domain.split('.').flatMap { label ->
+            listOf(label.length.toByte()) + label.toByteArray().toList()
+        } + 0.toByte()
+        val question = labels.toByteArray() + byteArrayOf(0, 1, 0, 1)
+        return ByteArray(12 + question.size).also {
+            it[0] = (id ushr 8).toByte()
+            it[1] = id.toByte()
+            it[2] = 1
+            it[5] = 1
+            question.copyInto(it, 12)
+        }
     }
 }

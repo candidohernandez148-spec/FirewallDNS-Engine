@@ -34,3 +34,23 @@ data class ThreatAssessment(
     val source: RuleSource? = null,
     val signals: List<ThreatSignal> = emptyList(),
 )
+
+data class SignedThreatFeed(
+    val version: Long,
+    val publishedAtEpochMillis: Long,
+    val expiresAtEpochMillis: Long,
+    val indicators: List<ThreatIndicator>,
+    val safeDomains: List<String> = emptyList(),
+    val signatureBase64: String,
+)
+
+sealed interface FeedUpdateResult {
+    data class Applied(
+        val revision: Long,
+        val feedVersion: Long,
+        val indicatorCount: Int,
+        val expiresAtEpochMillis: Long,
+    ) : FeedUpdateResult
+
+    data class Rejected(val reason: String) : FeedUpdateResult
+}

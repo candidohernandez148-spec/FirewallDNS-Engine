@@ -1,10 +1,5 @@
 package com.firewalldns.engine.dns
 
-/**
- * Structural validation for an upstream DNS response before it is exposed to
- * the host. It validates the question and every resource-record boundary;
- * RDATA remains opaque except for EDNS option framing.
- */
 internal object DnsUpstreamResponseValidator {
     fun validate(message: ByteArray, expectedQuestion: ByteArray): String? {
         if (message.size < HEADER_SIZE) return "dns_upstream_response_header_truncated"
@@ -58,7 +53,6 @@ internal object DnsUpstreamResponseValidator {
         return null
     }
 
-    /** Returns the end of the encoded name, while validating its expansion. */
     private fun skipName(message: ByteArray, start: Int): Int? {
         if (start !in message.indices) return null
         var cursor = start
@@ -77,8 +71,7 @@ internal object DnsUpstreamResponseValidator {
                 }
                 length and 0xc0 == 0xc0 -> {
                     if (cursor + 1 >= message.size) return null
-                    val pointer = ((length and 0x3f) shl 8) or
-                        (message[cursor + 1].toInt() and 0xff)
+                    val pointer = ((length and 0x3f) shl 8) or (message[cursor + 1].toInt() and 0xff)
                     if (pointer >= cursor || pointer >= message.size) return null
                     if (!jumped) consumed = cursor + 2
                     jumped = true

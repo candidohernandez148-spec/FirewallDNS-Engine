@@ -13,10 +13,7 @@ import java.net.SocketTimeoutException
 
 /** Socket protection hook implemented by the Android VpnService adapter. */
 interface DnsSocketProtector {
-    /** Must call VpnService.protect(socket) on Android before connect(). */
     fun protect(socket: DatagramSocket): Boolean
-
-    /** Must call VpnService.protect(socket) on Android before connect(). */
     fun protect(socket: Socket): Boolean
 }
 
@@ -59,11 +56,6 @@ sealed interface DnsUpstreamResult {
     data object Cancelled : DnsUpstreamResult
 }
 
-/**
- * Bounded synchronous DNS upstream exchange. Call from an I/O dispatcher, never
- * from the packet/policy hot path. UDP truncation is retried over DNS-over-TCP.
- * The protector must exclude both socket types from the local VPN to prevent loops.
- */
 class DnsUpstreamClient(
     private val config: DnsUpstreamConfig,
     private val socketProtector: DnsSocketProtector,
@@ -78,7 +70,6 @@ class DnsUpstreamClient(
 
     fun exchange(query: ByteArray): DnsUpstreamResult = exchange(query, DnsExchangeCancellation())
 
-    /** Runs one exchange within the supplied cancellation scope. */
     fun exchange(query: ByteArray, cancellation: DnsExchangeCancellation): DnsUpstreamResult {
         if (cancellation.isCancelled) return DnsUpstreamResult.Cancelled
         val question = when (val parsed = DnsMessageParser.parse(query)) {
@@ -110,19 +101,19 @@ class DnsUpstreamClient(
         DatagramSocket().use { socket ->
             if (!cancellation.register(socket)) return UdpAttempt.Cancelled
             try {
-            socket.soTimeout = config.timeoutMillis
-            if (!socketProtector.protect(socket)) {
-                return UdpAttempt.Failure("dns_upstream_udp_socket_protection_failed")
-            }
-            socket.connect(InetSocketAddress(config.host, config.port))
-            socket.send(DatagramPacket(query, query.size))
-            val buffer = ByteArray(config.udpBufferBytes)
-            val packet = DatagramPacket(buffer, buffer.size)
-            socket.receive(packet)
-            val response = buffer.copyOf(packet.length)
-            val invalidReason = validateResponse(query, question, response)
-            if (invalidReason != null) return UdpAttempt.Failure(invalidReason)
-            UdpAttempt.Response(response, flags(response) and FLAG_TRUNCATED != 0)
+                socket.soTimeout = config.timeoutMillis
+                if (!socketProtector.protect(socket)) {
+                    return UdpAttempt.Failure("dns_upstream_udp_socket_protection_failed")
+                }
+                socket.connect(InetSocketAddress(config.host, config.port))
+                socket.send(DatagramPacket(query, query.size))
+                val buffer = ByteArray(config.udpBufferBytes)
+                val packet = DatagramPacket(buffer, buffer.size)
+                socket.receive(packet)
+                val response = buffer.copyOf(packet.length)
+                val invalidReason = validateResponse(query, question, response)
+                if (invalidReason != null) return UdpAttempt.Failure(invalidReason)
+                UdpAttempt.Response(response, flags(response) and FLAG_TRUNCATED != 0)
             } finally {
                 cancellation.unregister(socket)
             }
@@ -141,28 +132,28 @@ class DnsUpstreamClient(
         Socket().use { socket ->
             if (!cancellation.register(socket)) return DnsUpstreamResult.Cancelled
             try {
-            if (!socketProtector.protect(socket)) {
-                return DnsUpstreamResult.Failure("dns_upstream_tcp_socket_protection_failed")
-            }
-            socket.connect(InetSocketAddress(config.host, config.port), config.timeoutMillis)
-            socket.soTimeout = config.timeoutMillis
-            socket.getOutputStream().apply {
-                write(DnsTcpFrameCodec.encode(query))
-                flush()
-            }
-            val input = DataInputStream(socket.getInputStream())
-            val frameLength = input.readUnsignedShort()
-            if (frameLength < DNS_HEADER_SIZE) {
-                return DnsUpstreamResult.Failure("dns_upstream_tcp_frame_too_short")
-            }
-            val response = ByteArray(frameLength)
-            input.readFully(response)
-            val invalidReason = validateResponse(query, question, response)
-            if (invalidReason != null) return DnsUpstreamResult.Failure(invalidReason)
-            if (flags(response) and FLAG_TRUNCATED != 0) {
-                return DnsUpstreamResult.Failure("dns_upstream_tcp_response_truncated")
-            }
-            DnsUpstreamResult.Success(DnsUpstreamResponse(response, DnsUpstreamTransport.TCP))
+                if (!socketProtector.protect(socket)) {
+                    return DnsUpstreamResult.Failure("dns_upstream_tcp_socket_protection_failed")
+                }
+                socket.connect(InetSocketAddress(config.host, config.port), config.timeoutMillis)
+                socket.soTimeout = config.timeoutMillis
+                socket.getOutputStream().apply {
+                    write(DnsTcpFrameCodec.encode(query))
+                    flush()
+                }
+                val input = DataInputStream(socket.getInputStream())
+                val frameLength = input.readUnsignedShort()
+                if (frameLength < DNS_HEADER_SIZE) {
+                    return DnsUpstreamResult.Failure("dns_upstream_tcp_frame_too_short")
+                }
+                val response = ByteArray(frameLength)
+                input.readFully(response)
+                val invalidReason = validateResponse(query, question, response)
+                if (invalidReason != null) return DnsUpstreamResult.Failure(invalidReason)
+                if (flags(response) and FLAG_TRUNCATED != 0) {
+                    return DnsUpstreamResult.Failure("dns_upstream_tcp_response_truncated")
+                }
+                DnsUpstreamResult.Success(DnsUpstreamResponse(response, DnsUpstreamTransport.TCP))
             } finally {
                 cancellation.unregister(socket)
             }

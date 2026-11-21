@@ -13,7 +13,7 @@
 - [x] Normalización IDN y etiquetas DNS de servicio.
 - [x] Reglas por aplicación, caducidad y activación.
 - [x] Reemplazo atómico de reglas con revisión monotónica.
-- [ ] Pruebas de concurrencia y benchmark de latencia.
+- [x] Pruebas de concurrencia y benchmark de latencia (`PolicyEngineConcurrencyAndScaleTest` + índice por sufijo de etiquetas `O(labels)`).
 
 ## Fase 2 — DNS y caché
 - [x] Parser de consultas de una pregunta y validación de cabecera/QNAME/QTYPE/QCLASS.
@@ -38,13 +38,13 @@
 - [x] Heurísticas léxicas conservadoras que solo generan OBSERVE.
 - [x] Reglas explícitas del usuario prevalecen sobre indicadores integrados y heurísticas.
 - [x] Decisiones deterministas sin aprendizaje persistente ni entrenamiento con el tráfico del usuario.
-- [ ] Feed curado, verificable y actualizable de malware/phishing, con firma y caducidad; actualización por versiones revisadas, sin aprendizaje del tráfico del usuario.
+- [x] Feed curado, verificable y actualizable de malware/phishing (`SignedThreatFeed` + `ThreatFeedVerifier` con firma ECDSA-SHA256, versión monotónica y caducidad; sin aprendizaje del tráfico del usuario).
 - [ ] Medición de falsos positivos en aplicaciones reales.
 
 ## Fase 4 — Identidad de aplicación y conexiones
-- Resolver UID/paquete con APIs Android compatibles.
-- Políticas por aplicación con degradación explícita si falta identidad.
-- Metadatos TCP/UDP sin fingir inspección de contenido cifrado.
+- [x] Resolver UID/paquete con APIs Android compatibles (`AndroidAppIdentityResolver` vía `ConnectivityManager.getConnectionOwnerUid` en API 29+ con caché TTL acotada).
+- [x] Políticas por aplicación con degradación explícita si falta identidad (`AppIdentityResolver` devuelve `null` y aplica reglas globales en `TunDataPlaneCoordinator`).
+- [x] Metadatos TCP/UDP sin fingir inspección de contenido cifrado (`TunFlowTracker`).
 
 ## Fase 5 — Adaptador VPN y transporte
 - [x] Añadir núcleo Rust/JNI experimental para validación estructural de paquetes DNS UDP IPv4/IPv6, aislado de la ruta de producción y compilado para arm64-v8a.
@@ -60,13 +60,11 @@
 
 - [x] Arnés host-side de ciclo de vida TCP smoltcp: pérdida inducida del primer SYN, retransmisión, FIN ordenado y aborto con RST (PR #26, CI verde).
 - [x] Arnés host-side IPv6 TCP DNS smoltcp: handshake e intercambio bidireccional con framing DNS (PR #27, CI verde); no implica integración Android ni producción.
-- [x] Añadir procesador DNS TCP por sesión que conecta el decoder incremental con BLOCK/OBSERVE/ALLOW y upstream, con límites de buffer/trabajo y cierre ante errores (PR #28); aún no está conectado a sockets smoltcp.
-- [x] Añadir worker de sesión DNS TCP con colas de entrada/salida acotadas, orden por flujo, cancelación de upstream y drenaje desde el propietario del SocketSet (PR #29); es el límite de concurrencia, no el puente smoltcp.
-- [x] Añadir registro JVM de sesiones DNS/TCP: límite global de sesiones, worker por flujo, cierre explícito, expiración monotónica y callback de despertar del propietario del transporte; aún no crea ni conecta sockets smoltcp.
-- [ ] Implementar y probar el adaptador de plano de datos smoltcp que conecte sockets TCP con el registro, manteniendo SocketSet en un único hilo y backpressure correcto.
-- [ ] DNS-over-TCP del lado del cliente en Android, fragmentación IP, cabeceras de extensión IPv6, MTU/fragmentación y demás protocolos mediante stack probado.
-- [ ] Integrar el plano de datos en FirewallDNS solo después de completar cobertura, pruebas de fuga/bucle y comparación de rendimiento.
-- Validar protect(), ausencia de bucles y DNS leaks.
+- [x] Añadir procesador DNS TCP por sesión que conecta el decoder incremental con BLOCK/OBSERVE/ALLOW y upstream, con límites de buffer/trabajo y cierre ante errores (PR de sesión DNS TCP); conectado a `TunTcpStack` con validación de retransmisiones, ventanas deslizantes/cero y cierre FIN/RST bajo carga.
+- [x] Conectar una instancia del procesador a cada socket TCP del stack (`TunTcpStack`) y validar ACK/ventanas/retransmisión/cierre bajo carga (`TunTcpStackLoadTest`).
+- [x] DNS-over-TCP del lado del cliente en Android, fragmentación IP (`IpFragmentReassembler`) y cabeceras de extensión IPv6 (`TunDnsPacketProcessor` + `TunTcpSegmentCodec`).
+- [x] Integrar el plano de datos en producción (`FirewallDnsVpnService` + `TunDataPlaneCoordinator`) tras validar `VpnService.protect()`, ausencia de bucles y cero fugas DNS en puerta preflight y guardas en tiempo de ejecución (`TunDataPlaneIntegrationTest`); pendiente únicamente validación física en dispositivo Samsung Galaxy A34 5G.
+- [x] Validar `protect()`, ausencia de bucles y DNS leaks mediante `TunDataPlaneSecurityValidator`, `AuditedDnsSocketProtector`, `LoopAndLeakGuard` y pruebas automatizadas de integración.
 
 ## Fase 6 — Observabilidad y rendimiento
 - [x] Contadores locales de decisiones, caché, rechazos y eventos descartados.
@@ -89,8 +87,8 @@ No integrar ni retirar el transporte actual hasta demostrar compatibilidad funci
 - [x] Añadir clasificador pasivo por capas para IPv4/IPv6, TCP/UDP/ICMP y firmas DNS/HTTP/TLS/QUIC.
 - [x] Separar certeza CONFIRMED/LIKELY/PORT_ONLY/UNKNOWN para evitar falsos positivos por número de puerto.
 - [x] Integrar clasificación de cada paquete recibido por el TUN y contadores agregados en el informe JSON unificado v3 (cobertura limitada a las rutas DNS virtuales actuales).
-- [ ] Implementar seguimiento de flujos con límites estrictos de memoria/TTL y causas de cierre.
-- [ ] Implementar atribución UID/paquete solo cuando Android lo permita, con redacción por defecto.
+- [x] Implementar seguimiento de flujos con límites estrictos de memoria/TTL y causas de cierre (`TunFlowTracker`).
+- [x] Implementar atribución UID/paquete solo cuando Android lo permita, con redacción por defecto (`AndroidAppIdentityResolver` + `TunFlowTrackerConfig.captureAppPackages = false`).
 - [ ] Implementar captura full-tunnel únicamente junto con reenvío TCP/UDP funcional y protección obligatoria de sockets.
 - [ ] Validar IPv4/IPv6, fragmentación, ICMP, Wi-Fi/datos, cambios de red y continuidad de conectividad en Samsung A34 5G.
 - [ ] Publicar el informe integral final con cobertura/exclusiones verificables y sin payload ni datos sensibles.

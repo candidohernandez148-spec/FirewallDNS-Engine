@@ -1,23 +1,11 @@
 package com.firewalldns.engine.dns
 
-/**
- * Timing and outcome for one resolver attempt. The callback is diagnostic-only;
- * callback failures are isolated from DNS resolution.
- */
 data class DnsUpstreamAttempt(
     val resolverIndex: Int,
     val elapsedNanos: Long,
     val result: DnsUpstreamResult,
 )
 
-/**
- * Tries configured upstreams in order. Only upstream-specific failures are
- * retried; invalid queries and local socket-protection failures are terminal.
- * Cancellation is terminal and is never retried.
- *
- * The host controls both resolver order and the maximum number of attempts.
- * This class does not choose public DNS providers or modify Android Private DNS.
- */
 class DnsUpstreamFailoverClient(
     private val upstreams: List<DnsUpstreamClient>,
     private val maxAttempts: Int = upstreams.size,
@@ -37,11 +25,6 @@ class DnsUpstreamFailoverClient(
         cancellation: DnsExchangeCancellation,
     ): DnsUpstreamResult = exchange(query, cancellation, null)
 
-    /**
-     * Optional observer; timing uses the monotonic clock and cannot affect DNS decisions.
-     * Each duration covers one complete client attempt, including socket protection,
-     * transport exchange, and response validation.
-     */
     fun exchange(
         query: ByteArray,
         cancellation: DnsExchangeCancellation,
@@ -54,7 +37,6 @@ class DnsUpstreamFailoverClient(
             val attemptResult = upstreams[index].exchange(query, cancellation)
             val elapsed = System.nanoTime() - started
             try { onAttempt?.invoke(DnsUpstreamAttempt(index, elapsed, attemptResult)) } catch (_: Throwable) {
-                // Observability must never change the resolver's decision.
             }
             when (val result = attemptResult) {
                 is DnsUpstreamResult.Success -> return result

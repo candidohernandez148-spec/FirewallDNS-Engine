@@ -3,7 +3,7 @@ plugins {
     `java-library`
 }
 
-kotlin { jvmToolchain(17) }
+kotlin { jvmToolchain(21) }
 
 dependencies {
     api(project(":engine-core"))
