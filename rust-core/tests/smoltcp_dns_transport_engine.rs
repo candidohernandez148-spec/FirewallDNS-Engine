@@ -164,7 +164,7 @@ fn ipv4_tcp_dns_handshake_stream_event_and_response_roundtrip() {
 
     let response_frame = frame_dns(&response(0x12));
     engine.queue_response(session_id, response_frame.clone()).unwrap();
-    assert!(!engine.close_session(session_id, abort = false), "FIN must wait until queued DNS response bytes enter the TCP send buffer");
+    assert!(!engine.close_session(session_id, false), "FIN must wait until queued DNS response bytes enter the TCP send buffer");
     let mut received = Vec::new();
     for tick in 5001..=7000 {
         pump_v4(
