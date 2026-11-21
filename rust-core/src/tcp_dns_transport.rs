@@ -133,7 +133,7 @@ impl TcpDnsTransport {
         tun_client_ipv6: Ipv6Address,
         max_sessions: usize,
     ) -> Result<Self, TcpDnsTransportError> {
-        if mtu < 576 || max_sessions == 0 {
+        if !(576..=9000).contains(&mtu) || !(1..=256).contains(&max_sessions) {
             return Err(TcpDnsTransportError::InvalidConfiguration);
         }
 
