@@ -1,71 +1,65 @@
 # Adaptador Android JNI para smoltcp DNS/TCP
 
-## Estado
+## Estado actual
 
-Esta implementación conecta el transporte smoltcp 0.14 al TUN del APK de diagnóstico de FirewallDNS-Engine. No integra todavía el transporte en la aplicación principal FirewallDNS ni habilita TCP/53 en su servicio productivo.
+El transporte smoltcp 0.14 está conectado al `DnsFirewallService` productivo del repositorio `FirewallDNS` (main, commit `f1c124a`) para DNS TCP/53 IPv4/IPv6. El APK de diagnóstico reutiliza la biblioteca nativa y añade pruebas del límite JNI. La integración de código ya existe; la aceptación en hardware sigue pendiente.
 
 ## Arquitectura y propiedad de hilos
 
-- Un único hilo dedicado es propietario de smoltcp Interface y SocketSet.
-- El lector TUN entrega los paquetes TCP/53 no fragmentados al coordinador y a la cola JNI de forma síncrona y en orden; JNI los copia a una cola acotada a 128 paquetes y 256 KiB. El trabajo DNS/upstream se ejecuta en workers por sesión.
-- El hilo propietario llama a poll(), takeEvent(), queueResponse(), closeSession() y takePacket().
-- El puente Rust comprueba ThreadId y rechaza accesos del propietario desde otro hilo.
-- Las colas RX/TX del dispositivo smoltcp están limitadas por paquetes y bytes.
-- El cierre FIN de una sesión half-closed espera a que las respuestas pendientes hayan entrado en el buffer TCP de smoltcp; si no se pueden drenar, se conserva la sesión hasta timeout en vez de descartar silenciosamente los bytes.
-- El sondeo procesa hasta 32 paquetes por lote y hasta cuatro lotes por tick; no usa Interface::poll sin límite.
+- Un único hilo dedicado es propietario de `smoltcp::Interface` y `SocketSet`.
+- El lector TUN Android conserva el orden de los paquetes TCP y los ofrece a la cola JNI acotada.
+- `nativeEnqueuePacket` solo valida y copia a la cola JNI; no toca smoltcp ni sus sockets.
+- El hilo propietario llama a `poll`, drena eventos, encola respuestas, extrae paquetes TX y cierra sesiones.
+- Los workers DNS por sesión procesan el decoder y el upstream; no acceden a objetos smoltcp.
+- El owner se despierta por eventos y mantiene un tick acotado para procesar timers/retransmisiones.
+- El cierre de sesión invalida workers, cierra el transporte y evita que respuestas tardías se escriban en una sesión TUN nueva.
 
-## Camino DNS/TCP
+## Camino DNS/TCP productivo
 
-1. El lector TUN identifica TCP destino puerto 53.
-2. El paquete pasa primero por el coordinador Android existente para guardas de bucle y política de seguridad.
-3. Solo paquetes IP completos/no fragmentados se ofrecen a smoltcp en el mismo orden en que se leen del TUN. TCP fragmentado permanece en la ruta de reensamblado y pila Kotlin de diagnóstico; no se pasa el fragmento original al motor nativo.
-4. smoltcp administra handshake, ACK, ventanas, retransmisiones, FIN/RST y el stream TCP IPv4/IPv6.
-5. El evento SessionOpened crea un DnsTcpSessionRegistry entry y un DnsTcpSessionProcessor por flujo.
-6. Los bytes Data se entregan en orden al decoder DNS TCP y a la política BLOCK/OBSERVE/ALLOW.
-7. Las consultas upstream usan TunDataPlaneCoordinator.exchangeProtectedUpstream(), que reutiliza el cliente failover existente y AuditedDnsSocketProtector. VpnService.protect() se ejecuta antes de connect(); si falla, el intercambio falla cerrado.
-8. Las respuestas DNS TCP completas vuelven por queueResponse() a la misma sesión smoltcp y sus paquetes se escriben por el descriptor TUN original.
+1. `DnsFirewallService` lee el descriptor TUN.
+2. `IpFragmentReassembler` reensambla fragmentos IPv4/IPv6 compatibles dentro de límites de memoria y tiempo.
+3. `DnsTcpPacketClassifier` identifica paquetes TCP destino 53 que pueden entrar al transporte.
+4. El lector entrega los paquetes en orden a `SmoltcpDnsTcpCoordinator.offerPacket()`.
+5. JNI añade cada paquete a una cola acotada de hasta 128 paquetes y 256 KiB.
+6. Un solo hilo ejecuta `NativeTcpDnsTransport.poll()` y el `TcpDnsTransport` de smoltcp gestiona handshake, ACK, ventanas, retransmisiones, FIN/RST y stream TCP.
+7. `SessionOpened` crea un procesador DNS por flujo; los eventos `Data` alimentan el decoder DNS/TCP incremental.
+8. El motor compartido aplica BLOCK / OBSERVE / ALLOW. El upstream UDP/TCP usa `DnsUpstreamFailoverClient` y `AndroidDnsSocketProtector`, que llama a `VpnService.protect()` antes de conectar.
+9. La respuesta DNS se encola en la sesión smoltcp; los paquetes de salida se escriben por el descriptor TUN original.
 
-No se abre un TcpStream Rust directo ni se crea un segundo VpnService.
+Si el transporte nativo no se crea o un paquete no es compatible con el clasificador, el camino alternativo no finge procesar DNS/TCP: el servicio aplica el fallback TCP RST a segmentos válidos. El tráfico TCP/UDP general no-DNS no se reenvía.
 
-## Formato de eventos JNI
+## Eventos JNI
 
 Todos los enteros están en big-endian.
 
-- Tipo 1, SessionOpened: byte tipo, u64 sessionId, dirección cliente (u8 familia 4/6 + 4/16 bytes), u16 puerto cliente, dirección servidor, u16 puerto servidor.
-- Tipo 2, Data: byte tipo, u64 sessionId, u32 longitud, bytes.
-- Tipo 3, PeerHalfClosed: byte tipo, u64 sessionId.
-- Tipo 4, SessionClosed: byte tipo, u64 sessionId.
+- Tipo 1, `SessionOpened`: byte tipo, u64 sessionId, dirección cliente (u8 familia 4/6 + 4/16 bytes), u16 puerto cliente, dirección servidor, u16 puerto servidor.
+- Tipo 2, `Data`: byte tipo, u64 sessionId, u32 longitud, bytes.
+- Tipo 3, `PeerHalfClosed`: byte tipo, u64 sessionId.
+- Tipo 4, `SessionClosed`: byte tipo, u64 sessionId.
 
 Una matriz vacía significa que no hay paquete/evento disponible. Los códigos de retorno de enqueue/queueResponse distinguen aceptación, cola llena, sesión inexistente, framing inválido y límite de respuesta.
 
-## Límites y seguridad
+## Límites y contabilidad
 
-- Máximo predeterminado: 64 sesiones.
+- Máximo predeterminado: 64 sesiones TCP DNS.
 - Buffer TCP smoltcp: 16 KiB RX + 16 KiB TX por sesión.
 - Cola de eventos: 256 eventos / 256 KiB.
 - Cola de respuestas: 1 MiB global y 128 KiB por sesión.
-- Workers DNS: entrada y salida acotadas, cancelación por sesión y expiración idle de 60 s.
-- smoltcp transport idle timeout: 120 s.
-- DNS TCP framing valida longitudes completas de 12 a 65535 bytes.
-- smoltcp recibe IPv4/IPv6 no fragmentados; los encabezados de extensión IPv6 solo se delegan cuando los admite el parser del transporte. Los paquetes con encabezado Fragment IPv6 y los fragmentos IPv4 permanecen en la ruta de reensamblado/pila Kotlin de diagnóstico. ESP queda fuera.
-- El servicio de diagnóstico conserva la arquitectura UDP y las guardas existentes. La cola nativa recibe TCP/53 en orden; no se usa el pool concurrente de workers para ordenar segmentos TCP.
-- DoH, DoT y DoQ no se descifran por inspección DNS TCP; no se declara inspección universal ni ausencia global de fugas.
+- Workers DNS y buffers por sesión acotados; expiración de sesión y cancelación upstream.
+- DNS TCP framing valida longitud y conserva los límites del mensaje DNS.
+- El lector reensambla fragmentos compatibles antes de smoltcp; no se promete soporte para todas las extensiones IPv6 ni jumbograms.
+- `smoltcpPacketsAccepted` significa aceptado por la cola JNI, no procesado por smoltcp.
+- `smoltcpIngressRejected` suma rechazos en cola JNI y rechazos al insertar en la cola RX del dispositivo smoltcp. Se lee desde un contador atómico y no requiere acceso concurrente a Interface/SocketSet.
+- `smoltcpNativeErrors` registra errores del límite JNI/poll; no reemplaza el contador de rechazos.
 
 ## Compilación
 
-El APK de diagnóstico se compila para ARM64 (Samsung A34 5G):
+CI compila Rust para Android ARM64 con NDK/cargo-ndk y empaqueta la biblioteca `libfirewalldns_native.so` en los APK de FirewallDNS y Diagnóstico. Requisitos del workflow: Rust estable, Android NDK 27.2.12479018, cargo-ndk, Gradle y Java 21.
 
-- Rust estable 1.91 o posterior.
-- Android NDK 27.2.12479018.
-- cargo-ndk.
-- Gradle 8.12 y Java 21.
+## Pruebas
 
-El módulo android-adapter ejecuta cargo ndk durante preBuild y empaqueta libfirewalldns_native.so desde build/generated/jniLibs/arm64-v8a.
+Las pruebas host-side verifican transporte TCP DNS IPv4/IPv6, lifecycle y round-trip sintético. CI también ejecuta pruebas Rust/JVM, comprobación del target ARM64 y ensamblado de ambos APK. El diagnóstico instalado prueba JNI y, cuando FirewallDNS está activo, realiza consultas DNS UDP/TCP reales por la VPN.
 
-## Pruebas y lo que todavía falta
+Estas comprobaciones no sustituyen la prueba física completa en Samsung A34 5G: Wi-Fi/datos, reconexión, varias apps/sesiones, saturación de colas, retransmisiones, FIN/RST, protección upstream, pérdidas, latencia, CPU, batería y estabilidad prolongada.
 
-CI ejecuta pruebas Rust host-side de handshake, stream y round-trip IPv4, handshake/stream IPv6, pruebas JVM, check de Rust Android ARM64 y ensamblado del APK con JNI.
-
-Estas comprobaciones no sustituyen pruebas físicas. Antes de producción deben validarse en Samsung A34 5G: Wi-Fi/datos, reconexión, múltiples apps/sesiones, presión de colas, retransmisiones, FIN/RST, protección de upstream, consumo de batería, estabilidad prolongada y ausencia de bucles en las rutas realmente interceptadas.
-
-La integración en app/src/main/java/com/firewall/dns/service/DnsFirewallService.kt del repositorio FirewallDNS queda pendiente. TCP/53 permanece deshabilitado en producción hasta superar esas pruebas.
+DoH, DoT y DoQ no se inspeccionan mediante este transporte DNS/53. No declarar cobertura de tráfico general ni ausencia global de fugas.
