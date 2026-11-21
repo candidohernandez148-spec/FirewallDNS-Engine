@@ -122,8 +122,8 @@ fn ipv4_tcp_dns_handshake_stream_event_and_response_roundtrip() {
         );
         while let Some(event) = engine.take_event() {
             if let TcpDnsEvent::SessionOpened { session_id, flow } = event {
-                assert_eq!(flow.client_ip, std::net::IpAddr::V4(CLIENT_V4.into()));
-                assert_eq!(flow.server_ip, std::net::IpAddr::V4(SERVER_V4.into()));
+                assert_eq!(flow.client_ip, std::net::IpAddr::V4(std::net::Ipv4Addr::new(10, 88, 0, 2)));
+                assert_eq!(flow.server_ip, std::net::IpAddr::V4(std::net::Ipv4Addr::new(10, 88, 0, 3)));
                 assert_eq!(flow.client_port, CLIENT_PORT);
                 assert_eq!(flow.server_port, DNS_PORT);
                 opened = Some(session_id);
@@ -214,8 +214,8 @@ fn ipv6_tcp_dns_handshake_and_stream_delivery() {
         );
         while let Some(event) = engine.take_event() {
             if let TcpDnsEvent::SessionOpened { session_id, flow } = event {
-                assert_eq!(flow.client_ip, std::net::IpAddr::V6(CLIENT_V6.into()));
-                assert_eq!(flow.server_ip, std::net::IpAddr::V6(SERVER_V6.into()));
+                assert_eq!(flow.client_ip, std::net::IpAddr::V6(std::net::Ipv6Addr::new(0xfd88, 0, 0, 0, 0, 0, 0, 2)));
+                assert_eq!(flow.server_ip, std::net::IpAddr::V6(std::net::Ipv6Addr::new(0xfd88, 0, 0, 0, 0, 0, 0, 3)));
                 opened = Some(session_id);
             }
         }
