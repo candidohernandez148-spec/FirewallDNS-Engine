@@ -3,7 +3,7 @@ package com.firewalldns.engine.android
 import com.firewalldns.engine.dns.DnsExchangeCancellation
 import com.firewalldns.engine.dns.DnsTcpSessionProcessor
 import com.firewalldns.engine.dns.DnsUpstreamResult
-import com.firewalldns.engine.core.DnsEvaluation
+import com.firewalldns.engine.dns.DnsEvaluation
 import com.firewalldns.engine.runtime.DnsTcpSessionRegistry
 import com.firewalldns.engine.runtime.DnsTcpSessionWorker
 import java.util.concurrent.ConcurrentHashMap
