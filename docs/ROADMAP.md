@@ -47,7 +47,7 @@
 - [x] Metadatos TCP/UDP sin fingir inspección de contenido cifrado (`TunFlowTracker`).
 
 ## Fase 5 — Adaptador VPN y transporte
-- [x] Añadir núcleo Rust/JNI para validación estructural UDP y transporte DNS/TCP smoltcp 0.14, empaquetado ARM64 en el APK de diagnóstico y aislado de la ruta de producción.
+- [x] Añadir núcleo Rust/JNI para validación estructural UDP y transporte DNS/TCP smoltcp 0.14, empaquetado ARM64 e integrado en el `DnsFirewallService` productivo para DNS TCP/53 IPv4/IPv6 (main, commit `f1c124a`); validación física pendiente.
 - [x] Añadir gestor Android experimental de flujos UDP protegidos con límite de flujos, colas por flujo, RX/TX loopback, cancelación, expiración monotónica por inactividad y cierre por flujo; aún sin puente TUN/smoltcp ni uso en producción.
 - [x] Añadir arnés host-side de ida y vuelta UDP entre smoltcp y un socket loopback, con reinyección de respuesta por cola RX; sin protect() ni TUN Android real.
 - [x] Añadir decodificador puro de datagramas UDP IPv4/IPv6 no DNS con validación de longitud/checksum; aún sin sockets, reenvío ni integración TUN.
@@ -61,8 +61,8 @@
 - [x] Arnés host-side de ciclo de vida TCP smoltcp: pérdida inducida del primer SYN, retransmisión, FIN ordenado y aborto con RST (PR #26, CI verde).
 - [x] Arnés host-side IPv6 TCP DNS smoltcp: handshake e intercambio bidireccional con framing DNS (PR #27, CI verde); no implica integración Android ni producción.
 - [x] Procesador DNS TCP por sesión que conecta el decoder incremental con BLOCK/OBSERVE/ALLOW y upstream, con límites de buffer/trabajo y cierre ante errores. La conexión se reutiliza en el `DnsFirewallService` de producción; la prueba física y la comparación de rendimiento siguen pendientes.
-- [x] Conectar una instancia del procesador DNS por sesión TCP smoltcp en el APK de diagnóstico, con decoder, política, upstream protegido y cancelación; validar ACK/ventanas/retransmisión/cierre en pruebas host-side.
-- [x] Implementar el transporte DNS/TCP del lado TUN sobre smoltcp 0.14 para IPv4/IPv6, con eventos por sesión, framing DNS, límites de memoria y respuestas por la misma conexión en el APK de diagnóstico.
+- [x] Conectar una instancia del procesador DNS por sesión TCP smoltcp en el APK de diagnóstico y en el `DnsFirewallService` productivo, con decoder, política, upstream protegido y cancelación; validar ACK/ventanas/retransmisión/cierre en pruebas host-side.
+- [x] Implementar el transporte DNS/TCP del lado TUN sobre smoltcp 0.14 para IPv4/IPv6, con eventos por sesión, framing DNS, límites de memoria y respuestas por la misma conexión; conectado a producción y al APK de diagnóstico.
 - [x] Integrar el transporte smoltcp/JNI en el `DnsFirewallService` existente del repositorio FirewallDNS para DNS TCP/53, sin crear otro `VpnService` (main, commit `f1c124a`).
 - [ ] Completar pruebas físicas en Samsung A34 5G para DNS TCP/53 IPv4/IPv6, retransmisión, concurrencia, protección upstream, estabilidad y rendimiento.
 - [x] Implementar guardas y pruebas de preflight para `protect()`, bucles y fugas en el entorno de diagnóstico; [ ] validar el comportamiento real y fail-closed en el Samsung A34 5G.
