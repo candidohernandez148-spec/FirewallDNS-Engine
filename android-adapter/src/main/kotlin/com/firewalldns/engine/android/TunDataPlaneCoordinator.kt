@@ -196,6 +196,12 @@ class TunDataPlaneCoordinator private constructor(
         appIdentity = appIdentityResolver.metrics(),
     )
 
+    /** Reuses the audited VpnService.protect() path for native TCP DNS sessions. */
+    fun exchangeProtectedUpstream(
+        query: ByteArray,
+        cancellation: DnsExchangeCancellation,
+    ): DnsUpstreamResult = guardedUpstreamExchange(query, cancellation)
+
     private fun guardedUpstreamExchange(
         query: ByteArray,
         cancellation: DnsExchangeCancellation,

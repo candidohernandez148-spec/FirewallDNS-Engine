@@ -2,7 +2,7 @@ package com.firewalldns.engine.android
 
 import com.firewalldns.engine.dns.DnsExchangeCancellation
 import com.firewalldns.engine.dns.DnsTcpSessionProcessor
-import com.firewalldns.engine.dns.DnsUpstreamFailoverClient
+import com.firewalldns.engine.dns.DnsUpstreamResult
 import com.firewalldns.engine.runtime.DnsTcpSessionRegistry
 import com.firewalldns.engine.runtime.DnsTcpSessionWorker
 import com.firewalldns.engine.runtime.EngineRuntime
@@ -31,7 +31,7 @@ data class SmoltcpDnsTcpMetrics(
 class SmoltcpDnsTcpCoordinator(
     private val transport: NativeTcpDnsTransport,
     private val engine: EngineRuntime,
-    private val upstream: DnsUpstreamFailoverClient,
+    private val exchangeUpstream: (ByteArray, DnsExchangeCancellation) -> DnsUpstreamResult,
     private val appIdentityResolver: AppIdentityResolver,
     private val onTunPacket: (ByteArray) -> Unit,
     private val wakeOwner: () -> Unit,
@@ -153,7 +153,7 @@ class SmoltcpDnsTcpCoordinator(
         return DnsTcpSessionProcessor(
             evaluateDns = { query, _ -> engine.evaluateDns(query, appPackage) },
             exchangeUpstream = { query, cancellation ->
-                upstream.exchange(query, cancellation)
+                exchangeUpstream(query, cancellation)
             },
         ).also { processors[sessionId] = it }
     }

@@ -204,7 +204,7 @@ class FirewallDnsVpnService : VpnService() {
         val tcpCoordinator = SmoltcpDnsTcpCoordinator(
             transport = nativeTransport,
             engine = runtime.engine,
-            upstream = runtime.createDnsFailover(upstreams),
+            exchangeUpstream = coordinator::exchangeProtectedUpstream,
             appIdentityResolver = appIdentityResolver,
             onTunPacket = ::writePacketToTun,
             wakeOwner = { ownerWake.offer(Unit) },
