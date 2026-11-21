@@ -133,7 +133,7 @@ class DnsTcpSessionWorker(
                 while (!closed.get()) {
                     when (result) {
                         is DnsTcpSessionProcessor.ProcessResult.Processed -> {
-                            val bytes = processor.pollOutbound(maxQueuedResponseBytes)
+                            val bytes = processor.pollOutbound(processor.maxPendingOutboundBytes)
                             if (!enqueueFramedResponses(bytes)) return
                             if (!result.hasMoreWork) break
                             result = processor.processPendingFrames()
