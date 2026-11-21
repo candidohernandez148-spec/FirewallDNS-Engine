@@ -1,7 +1,20 @@
-name: Engine Core (manual validation)
+name: Engine Core validation
 
 on:
   workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - "rust-core/**"
+      - "android-adapter/**"
+      - "dns-engine/**"
+      - "engine-runtime/**"
+      - ".github/workflows/engine-core.yml"
+  push:
+    branches: [main]
+    paths:
+      - "rust-core/**"
+      - ".github/workflows/engine-core.yml"
 
 jobs:
   test:
@@ -13,6 +26,8 @@ jobs:
           targets: aarch64-linux-android
       - name: Test Rust native core and smoltcp transport labs
         run: cargo test --manifest-path rust-core/Cargo.toml
+      - name: Check Android ARM64 Rust target
+        run: cargo check --manifest-path rust-core/Cargo.toml --target aarch64-linux-android
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
