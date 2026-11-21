@@ -56,11 +56,11 @@
 - Evaluar stack probado frente a alternativas nativas.
 - [x] Procesamiento inicial de UDP DNS IPv4/IPv6 básico, checksum de respuestas y decisiones BLOCK/OBSERVE/ALLOW con pruebas unitarias.
 - [x] Preflight unificado IPv4/IPv6 TCP+UDP en Rust: longitudes, checksums, Data Offset, rechazo de fragmentos/extensiones no soportadas; API pura con pruebas host-side, todavía fuera de JNI y producción.
-- [x] Arnés host-side smoltcp TCP en IPv4/IPv6 y transporte stateful de DNS TCP conectado al decoder/políticas/upstream protegido en el APK de diagnóstico; no equivale a integración en la app principal ni validación física.
+- [x] Arnés host-side smoltcp TCP en IPv4/IPv6 y transporte stateful de DNS TCP conectado al decoder/políticas/upstream protegido en el APK de diagnóstico y en la app principal; no equivale a validación física.
 
 - [x] Arnés host-side de ciclo de vida TCP smoltcp: pérdida inducida del primer SYN, retransmisión, FIN ordenado y aborto con RST (PR #26, CI verde).
 - [x] Arnés host-side IPv6 TCP DNS smoltcp: handshake e intercambio bidireccional con framing DNS (PR #27, CI verde); no implica integración Android ni producción.
-- [x] Procesador DNS TCP por sesión que conecta el decoder incremental con BLOCK/OBSERVE/ALLOW y upstream, con límites de buffer/trabajo y cierre ante errores. La conexión al transporte queda pendiente de migrar desde `TunTcpStack` Kotlin a smoltcp/Rust.
+- [x] Procesador DNS TCP por sesión que conecta el decoder incremental con BLOCK/OBSERVE/ALLOW y upstream, con límites de buffer/trabajo y cierre ante errores. La conexión se reutiliza en el `DnsFirewallService` de producción; la prueba física y la comparación de rendimiento siguen pendientes.
 - [x] Conectar una instancia del procesador DNS por sesión TCP smoltcp en el APK de diagnóstico, con decoder, política, upstream protegido y cancelación; validar ACK/ventanas/retransmisión/cierre en pruebas host-side.
 - [x] Implementar el transporte DNS/TCP del lado TUN sobre smoltcp 0.14 para IPv4/IPv6, con eventos por sesión, framing DNS, límites de memoria y respuestas por la misma conexión en el APK de diagnóstico.
 - [x] Integrar el transporte smoltcp/JNI en el `DnsFirewallService` existente del repositorio FirewallDNS para DNS TCP/53, sin crear otro `VpnService` (main, commit `f1c124a`).

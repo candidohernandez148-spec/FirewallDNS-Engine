@@ -1,52 +1,36 @@
-# Decisión: frontera TUN y pila de paquetes
+# Decisión: frontera TUN y transporte smoltcp
 
-## Decisión de implementación
+## Alcance elegido
 
-Se adopta `smoltcp` como candidato de pila IP/TCP/UDP integrada en Rust, sujeto a pruebas de compatibilidad, throughput, latencia, memoria y consumo en el Samsung Galaxy A34 5G. No se implementará TCP/IP desde cero.
+Se utiliza smoltcp 0.14.0 para el transporte TCP de DNS/53 en IPv4 e IPv6. No se implementa TCP/IP desde cero ni se activa un túnel de tráfico general. La política DNS continúa en FirewallDNS-Engine; Android conserva el único VpnService y el descriptor TUN.
 
-La primera pieza es `rust-core::TunPacketDevice`: un adaptador de paquetes IP con colas RX/TX acotadas y límites MTU que implementa `smoltcp::phy::Device`. Es una frontera de datos en memoria, no un TUN Android ni un proxy de Internet.
+## Contrato de concurrencia
 
-## Contrato
+- Kotlin es propietario del ciclo de vida del descriptor TUN y de sus streams.
+- El lector TUN entrega paquetes TCP/53 en orden a una cola JNI acotada.
+- Rust mantiene Interface y SocketSet dentro de una única instancia.
+- Un único hilo propietario ejecuta poll, lee eventos, encola respuestas y cierra sesiones.
+- Los workers DNS por sesión no acceden a objetos smoltcp; solo intercambian bytes y despiertan al propietario.
+- Las colas, sesiones y buffers tienen límites explícitos.
+- Los sockets upstream deben pasar VpnService.protect() antes de conectarse; un fallo de protección no se convierte en conexión alternativa sin proteger.
 
-- Kotlin conserva `VpnService`, el descriptor TUN y su ciclo de vida.
-- El adaptador Android será responsable de leer/escribir paquetes completos del descriptor y pasarlos al dispositivo Rust.
-- Rust/smoltcp consumirá paquetes RX y producirá paquetes TX.
-- Los sockets externos deberán protegerse con `VpnService.protect()` antes de conectar.
-- Ninguna cola será ilimitada; cada rechazo debe contabilizarse y comunicarse al host.
-- La autoridad de políticas permanece en FirewallDNS-Engine.
-- No se activa este dispositivo en la VPN de producción hasta que exista un procesador completo de flujos y pruebas de retorno de paquetes.
+## Estado de integración
 
-## Alcance de esta entrega
+El camino TUN → JNI → smoltcp → sesión DNS incremental → política → upstream protegido → respuesta por el mismo flujo está conectado al DnsFirewallService de producción de FirewallDNS (main, commit f1c124a). El APK de diagnóstico reutiliza la biblioteca nativa. La integración de código está hecha; la validación física completa sigue pendiente.
 
-Implementa únicamente el dispositivo smoltcp con colas acotadas, validación de tamaño/MTU, contadores de rechazos y pruebas unitarias. No abre sockets, no crea flujos TCP/UDP, no realiza JNI, no lee/escribe el TUN y no se conecta a la VPN de producción.
+El módulo rust-core::l4_packet también ofrece un validador estructural IPv4/IPv6 TCP/UDP con pruebas host-side. Ese validador independiente no debe confundirse con una garantía de que todos sus casos estén habilitados en el camino productivo.
 
-## Siguientes puertas
+## Fragmentación y límites de paquetes
 
-1. Adaptador JNI con duplicación/cierre seguro del descriptor TUN y cancelación determinista.
-2. Bucle smoltcp con temporización, poll y gestión de sockets.
-3. Tabla de flujos UDP y TCP, sockets protegidos y traducción de paquetes bidireccional.
-4. DNS UDP/TCP y políticas compartidas sin duplicar decisiones.
-5. Pruebas de integración IPv4/IPv6, fragmentación/MTU, cierres, reconexión y saturación.
-6. Pruebas en Galaxy A34 5G antes de habilitar la ruta en producción.
+El lector usa IpFragmentReassembler antes de clasificar paquetes. El reensamblador tiene límites de sesiones, bytes, tamaño de paquete y TTL monotónico; admite fragmentos IPv4 e IPv6 compatibles. Extensiones IPv6 no soportadas, jumbograms y casos fuera de los tests siguen siendo límites explícitos. La cobertura debe confirmarse con tráfico real, no inferirse del mero uso de la clase.
 
-Esta secuencia evita sustituir el filtrado DNS que ya funciona por un plano de datos todavía incompleto.
+## Puertas restantes
 
-## Validador L4 y framing DNS TCP
+1. Probar DNS TCP/53 real por IPv4 e IPv6 desde aplicaciones del teléfono.
+2. Verificar handshake, pérdida/retransmisión, FIN/RST, concurrencia, límites y expiración.
+3. Confirmar contadores de rechazo de cola y errores nativos con pruebas de saturación reproducibles.
+4. Medir protección upstream y ausencia de recursión en Wi-Fi y datos móviles.
+5. Medir latencia, throughput, CPU, memoria, batería y estabilidad prolongada.
+6. Comparar resultados contra la implementación anterior antes de retirar cualquier código de referencia.
 
-`rust-core::l4_packet` añade un preflight puro para IPv4/IPv6 TCP y UDP: IHL/longitudes, checksum IPv4, rechazo de fragmentos y extensiones IPv6, Data Offset TCP, checksum TCP con pseudo-cabecera, longitud UDP y semántica de checksum UDP IPv4/IPv6. Incluye pruebas host-side de paquetes válidos, checksums corruptos, truncamiento, fragmentación y extensiones no soportadas. El módulo se exporta desde la crate, pero todavía no se expone por JNI ni se invoca desde el lector TUN Android.
-
-En la aplicación Android, el lector TUN reensambla fragmentos antes de clasificar el paquete. DNS UDP/53 se procesa en el worker existente; DNS TCP/53 válido se entrega a `NativeTcpDnsTransport`/smoltcp mediante `SmoltcpDnsTcpCoordinator`, y el resto del TCP no DNS queda fuera de este plano DNS-only. El decoder incremental y el cliente upstream admiten framing TCP y fallback UDP truncado → TCP en el lado upstream.
-
-**Estado:** la ruta descriptor TUN → JNI → smoltcp por flujo → decoder DNS incremental → políticas → upstream protegido → respuesta en el mismo flujo ya está conectada al `DnsFirewallService` de producción. La puerta pendiente ya no es integrar el código, sino demostrar en dispositivo IPv4/IPv6, concurrencia, retransmisión, timeouts, saturación, reconexión, protección upstream y rendimiento. No habilitar tráfico TCP/UDP general ni declarar inspección DoH/DoT/DoQ.
-
-
-## Acumulación incremental DNS sobre TCP
-
-Se añade `DnsTcpStreamDecoder` como componente puro y acotado de `:dns-engine`:
-- Mantiene un buffer fijo por instancia/conexión, sin crecimiento dinámico.
-- Acepta fragmentos arbitrarios del flujo, incluidos prefijo de 2 bytes y cuerpo divididos entre lecturas.
-- Extrae un frame completo por llamada y conserva los bytes posteriores para mensajes concatenados.
-- Rechaza de forma atómica escrituras que exceden el presupuesto y pasa a estado terminal ante una longitud DNS inferior a 12 bytes.
-- Permite limpiar el estado al cerrar/reutilizar una conexión mediante `reset()`.
-
-Este componente no administra TCP, ACK, retransmisiones, ventanas ni sockets. Debe existir una instancia por conexión TCP aceptada por smoltcp y el consumidor debe drenar frames completos antes de aceptar más datos. No habilita DNS-over-TCP en el TUN productivo; sigue pendiente el puente TUN/JNI/smoltcp y la conexión con el motor de políticas y la respuesta por el mismo flujo.
+No habilitar TCP/UDP general ni afirmar inspección de DoH/DoT/DoQ como parte de esta decisión.
