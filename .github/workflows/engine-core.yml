@@ -9,6 +9,7 @@ on:
       - "android-adapter/**"
       - "dns-engine/**"
       - "engine-runtime/**"
+      - "app/**"
       - ".github/workflows/engine-core.yml"
   push:
     branches: [main]
