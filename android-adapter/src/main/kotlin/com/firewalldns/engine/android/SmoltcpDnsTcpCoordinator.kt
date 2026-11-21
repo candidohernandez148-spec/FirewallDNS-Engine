@@ -104,12 +104,9 @@ class SmoltcpDnsTcpCoordinator(
 
         for (sessionId in peerHalfClosed.toList()) {
             if (registry.isActive(sessionId) && registry.isIdle(sessionId)) {
-                registry.closeSession(sessionId)
                 if (transport.closeSession(sessionId, abort = false)) {
+                    registry.closeSession(sessionId)
                     gracefulClosing += sessionId
-                } else {
-                    transport.closeSession(sessionId, abort = true)
-                    cleanupSession(sessionId)
                 }
             }
         }
