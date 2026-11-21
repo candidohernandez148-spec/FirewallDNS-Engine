@@ -115,6 +115,11 @@ class DnsTcpSessionRegistry(
         }
     }
 
+    /** True only when no input, processing work, or undrained response remains. */
+    fun isIdle(sessionId: Long): Boolean = synchronized(lock) {
+        sessions[sessionId]?.worker?.isIdle ?: true
+    }
+
     /** FIN, RST, or transport teardown must close the matching session. */
     fun closeSession(sessionId: Long): Boolean {
         val entry = synchronized(lock) { sessions.remove(sessionId) } ?: return false
