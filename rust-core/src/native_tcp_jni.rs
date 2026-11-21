@@ -85,6 +85,23 @@ fn array_from_bytes(env: &mut JNIEnv<'_>, bytes: &[u8]) -> jbyteArray {
         .unwrap_or(ptr::null_mut())
 }
 
+fn parse_ipv6(bytes: &[u8]) -> Ipv6Address {
+    let words = [
+        u16::from_be_bytes([bytes[0], bytes[1]]),
+        u16::from_be_bytes([bytes[2], bytes[3]]),
+        u16::from_be_bytes([bytes[4], bytes[5]]),
+        u16::from_be_bytes([bytes[6], bytes[7]]),
+        u16::from_be_bytes([bytes[8], bytes[9]]),
+        u16::from_be_bytes([bytes[10], bytes[11]]),
+        u16::from_be_bytes([bytes[12], bytes[13]]),
+        u16::from_be_bytes([bytes[14], bytes[15]]),
+    ];
+    Ipv6Address::new(
+        words[0], words[1], words[2], words[3],
+        words[4], words[5], words[6], words[7],
+    )
+}
+
 fn encode_ip(output: &mut Vec<u8>, ip: IpAddr) {
     match ip {
         IpAddr::V4(address) => {
