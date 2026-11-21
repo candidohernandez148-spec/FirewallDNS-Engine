@@ -30,6 +30,7 @@ pub struct ValidatedTransportPacket<'a> {
     pub source_port: u16,
     pub destination_port: u16,
     pub ip_header_len: usize,
+    pub transport_offset: usize,
     pub transport_header_len: usize,
     pub transport_len: usize,
     pub payload: &'a [u8],
@@ -42,16 +43,16 @@ impl ValidatedTransportPacket<'_> {
 
 /// Validates one complete IP packet and returns its checked TCP/UDP metadata.
 ///
-/// IPv4 options are accepted after validating IHL and header checksum.
-/// IPv4 fragments, IPv6 extension headers, IPv6 jumbograms and trailing bytes
-/// beyond the declared IP length are rejected explicitly.
+/// IPv4 options and supported IPv6 extension headers are parsed and validated.
+/// Non-atomic fragments, ESP, IPv6 jumbograms and trailing bytes beyond the
+/// declared IP length are rejected explicitly.
 pub fn validate_tun_l4_packet(
     packet: &[u8],
 ) -> Result<ValidatedTransportPacket<'_>, PacketValidationResult> {
     let first = *packet.first().ok_or(PacketValidationResult::InvalidIpHeader)?;
     let version = first >> 4;
 
-    let (ip_header_len, total_len, protocol, source, destination, ipv6) = match version {
+    let (ip_header_len, transport_offset, total_len, protocol, source, destination, ipv6) = match version {
         4 => {
             if packet.len() < 20 { return Err(PacketValidationResult::InvalidIpHeader); }
             let header_len = ((first & 0x0f) as usize) * 4;
@@ -74,6 +75,7 @@ pub fn validate_tun_l4_packet(
             dst.copy_from_slice(&packet[16..20]);
             (
                 header_len,
+                header_len,
                 total_len,
                 packet[9],
                 IpAddr::V4(Ipv4Addr::from(src)),
@@ -89,10 +91,44 @@ pub fn validate_tun_l4_packet(
             if payload_len == 0 || total_len != packet.len() {
                 return Err(PacketValidationResult::InvalidIpLength);
             }
-            let next_header = packet[6];
-            if next_header == 44 { return Err(PacketValidationResult::IpFragment); }
-            if is_ipv6_extension(next_header) {
-                return Err(PacketValidationResult::UnsupportedIpv6Extension);
+            let mut next_header = packet[6];
+            let mut transport_offset = 40usize;
+            let mut extension_count = 0usize;
+            loop {
+                if next_header == 44 {
+                    if transport_offset + 8 > total_len {
+                        return Err(PacketValidationResult::InvalidL4Length);
+                    }
+                    let fragment = read_u16(packet, transport_offset + 2);
+                    if fragment & 0xfff9 != 0 {
+                        return Err(PacketValidationResult::IpFragment);
+                    }
+                    next_header = packet[transport_offset];
+                    transport_offset += 8;
+                    extension_count += 1;
+                    continue;
+                }
+                if !is_ipv6_extension(next_header) {
+                    break;
+                }
+                if next_header == 50 {
+                    return Err(PacketValidationResult::UnsupportedIpv6Extension);
+                }
+                extension_count += 1;
+                if extension_count > 8 || transport_offset + 2 > total_len {
+                    return Err(PacketValidationResult::UnsupportedIpv6Extension);
+                }
+                let following = packet[transport_offset];
+                let extension_len = if next_header == 51 {
+                    ((packet[transport_offset + 1] as usize) + 2) * 4
+                } else {
+                    ((packet[transport_offset + 1] as usize) + 1) * 8
+                };
+                if extension_len < 8 || transport_offset + extension_len > total_len {
+                    return Err(PacketValidationResult::InvalidL4Length);
+                }
+                next_header = following;
+                transport_offset += extension_len;
             }
             let mut src = [0u8; 16];
             src.copy_from_slice(&packet[8..24]);
@@ -100,6 +136,7 @@ pub fn validate_tun_l4_packet(
             dst.copy_from_slice(&packet[24..40]);
             (
                 40,
+                transport_offset,
                 total_len,
                 next_header,
                 IpAddr::V6(Ipv6Addr::from(src)),
@@ -113,19 +150,19 @@ pub fn validate_tun_l4_packet(
     if protocol != IPPROTO_TCP && protocol != IPPROTO_UDP {
         return Err(PacketValidationResult::UnsupportedProtocol);
     }
-    let transport_len = total_len - ip_header_len;
+    let transport_len = total_len - transport_offset;
     let minimum = if protocol == IPPROTO_TCP { 20 } else { 8 };
     if transport_len < minimum {
         return Err(PacketValidationResult::InvalidL4Length);
     }
-    let transport = &packet[ip_header_len..total_len];
+    let transport = &packet[transport_offset..total_len];
 
     let transport_header_len = if protocol == IPPROTO_TCP {
         let header_len = ((transport[12] >> 4) as usize) * 4;
         if !(20..=transport_len).contains(&header_len) {
             return Err(PacketValidationResult::InvalidL4Length);
         }
-        if transport_checksum(ipv6, &packet[ip_header_len..total_len], source, destination, protocol) != 0 {
+        if transport_checksum(ipv6, transport, source, destination, protocol) != 0 {
             return Err(PacketValidationResult::InvalidL4Checksum);
         }
         header_len
@@ -153,6 +190,7 @@ pub fn validate_tun_l4_packet(
         source_port: read_u16(transport, 0),
         destination_port: read_u16(transport, 2),
         ip_header_len,
+        transport_offset,
         transport_header_len,
         transport_len,
         payload: &transport[transport_header_len..],
@@ -306,6 +344,26 @@ mod tests {
     }
 
     #[test]
+    fn validates_tcp_after_ipv6_hop_by_hop_extension() {
+        let base = make_packet(true, IPPROTO_TCP, &[9, 8, 7]);
+        let mut packet = vec![0u8; base.len() + 8];
+        packet[..40].copy_from_slice(&base[..40]);
+        let payload_len = (base.len() - 40 + 8) as u16;
+        packet[4..6].copy_from_slice(&payload_len.to_be_bytes());
+        packet[6] = 0; // Hop-by-Hop Options
+        packet[40] = IPPROTO_TCP;
+        packet[41] = 0; // Eight-byte extension header
+        packet[48..].copy_from_slice(&base[40..]);
+
+        let parsed = validate_tun_l4_packet(&packet).unwrap();
+        assert!(parsed.is_tcp());
+        assert_eq!(parsed.ip_header_len, 40);
+        assert_eq!(parsed.transport_offset, 48);
+        assert_eq!(parsed.destination_port, 53);
+        assert_eq!(parsed.payload, &[9, 8, 7]);
+    }
+
+    #[test]
     fn rejects_bad_tcp_header_length_checksum_and_ipv4_fragment() {
         let mut bad_offset = make_packet(false, IPPROTO_TCP, &[]);
         bad_offset[32] = 0x40;
@@ -336,9 +394,9 @@ mod tests {
     }
 
     #[test]
-    fn rejects_ipv6_extension_and_declared_length_mismatch() {
+    fn rejects_ipv6_esp_and_declared_length_mismatch() {
         let mut extension = make_packet(true, IPPROTO_TCP, &[]);
-        extension[6] = 60;
+        extension[6] = 50; // ESP cannot expose the TCP header to the parser
         assert_eq!(
             validate_tun_l4_packet(&extension),
             Err(PacketValidationResult::UnsupportedIpv6Extension)

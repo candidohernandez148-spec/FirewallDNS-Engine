@@ -127,7 +127,9 @@ impl TcpDnsTransport {
     /// The default routes point back to the VPN client's assigned addresses.
     pub fn new(
         mtu: usize,
+        tun_dns_ipv4: Ipv4Address,
         tun_client_ipv4: Ipv4Address,
+        tun_dns_ipv6: Ipv6Address,
         tun_client_ipv6: Ipv6Address,
         max_sessions: usize,
     ) -> Result<Self, TcpDnsTransportError> {
@@ -149,11 +151,11 @@ impl TcpDnsTransport {
         let mut iface = Interface::new(config, &mut device, Instant::ZERO);
         iface.update_ip_addrs(|addresses| {
             addresses
-                .push(IpCidr::new(IpAddress::Ipv4(Ipv4Address::new(10, 77, 0, 1)), 32))
+                .push(IpCidr::new(IpAddress::Ipv4(tun_dns_ipv4), 32))
                 .expect("smoltcp address capacity supports IPv4");
             addresses
                 .push(IpCidr::new(
-                    IpAddress::Ipv6(Ipv6Address::new(0xfd77, 0, 0, 0, 0, 0, 0, 1)),
+                    IpAddress::Ipv6(tun_dns_ipv6),
                     128,
                 ))
                 .expect("smoltcp address capacity supports IPv6");
@@ -295,6 +297,9 @@ impl TcpDnsTransport {
         };
         if session.closing {
             return true;
+        }
+        if !abort && session.outbound_bytes > 0 {
+            return false;
         }
         let socket = self.sockets.get_mut::<tcp::Socket>(session.handle);
         if abort {
@@ -515,7 +520,7 @@ fn parse_dns_tcp_flow(packet: &[u8]) -> Option<FlowKey> {
 fn parse_dns_tcp_syn(packet: &[u8]) -> Option<FlowKey> {
     let flow = parse_dns_tcp_flow(packet)?;
     let parsed = validate_tun_l4_packet(packet).ok()?;
-    let flags_offset = parsed.ip_header_len.checked_add(13)?;
+    let flags_offset = parsed.transport_offset.checked_add(13)?;
     let flags = *packet.get(flags_offset)?;
     if flags & 0x02 == 0 || flags & 0x10 != 0 {
         return None;

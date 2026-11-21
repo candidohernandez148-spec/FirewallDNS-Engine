@@ -101,7 +101,7 @@ fn ipv4_tcp_dns_handshake_stream_event_and_response_roundtrip() {
         SocketBuffer::new(vec![0; 8192]),
         SocketBuffer::new(vec![0; 8192]),
     ));
-    let mut engine = TcpDnsTransport::new(1500, CLIENT_V4, CLIENT_V6, 8).unwrap();
+    let mut engine = TcpDnsTransport::new(1500, SERVER_V4, CLIENT_V4, SERVER_V6, CLIENT_V6, 8).unwrap();
 
     client_sockets.get_mut::<TcpSocket>(client_handle)
         .connect(
@@ -164,6 +164,7 @@ fn ipv4_tcp_dns_handshake_stream_event_and_response_roundtrip() {
 
     let response_frame = frame_dns(&response(0x12));
     engine.queue_response(session_id, response_frame.clone()).unwrap();
+    assert!(!engine.close_session(session_id, false), "FIN must wait until queued DNS response bytes enter the TCP send buffer");
     let mut received = Vec::new();
     for tick in 5001..=7000 {
         pump_v4(
@@ -182,6 +183,7 @@ fn ipv4_tcp_dns_handshake_stream_event_and_response_roundtrip() {
         }
     }
     assert_eq!(received, response_frame, "engine must return exact framed DNS response");
+    assert!(engine.close_session(session_id, false), "FIN may follow after the response queue drains");
 }
 
 #[test]
@@ -193,7 +195,7 @@ fn ipv6_tcp_dns_handshake_and_stream_delivery() {
         SocketBuffer::new(vec![0; 8192]),
         SocketBuffer::new(vec![0; 8192]),
     ));
-    let mut engine = TcpDnsTransport::new(1500, CLIENT_V4, CLIENT_V6, 8).unwrap();
+    let mut engine = TcpDnsTransport::new(1500, SERVER_V4, CLIENT_V4, SERVER_V6, CLIENT_V6, 8).unwrap();
 
     client_sockets.get_mut::<TcpSocket>(client_handle)
         .connect(

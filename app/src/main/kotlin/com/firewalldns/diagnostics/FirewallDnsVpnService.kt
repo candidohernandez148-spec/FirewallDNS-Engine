@@ -10,6 +10,9 @@ import android.os.ParcelFileDescriptor
 import android.os.SystemClock
 import com.firewalldns.engine.android.AndroidAppIdentityResolver
 import com.firewalldns.engine.android.AndroidEngineRuntime
+import com.firewalldns.engine.android.NativeTcpDnsTransport
+import com.firewalldns.engine.android.SmoltcpDnsTcpCoordinator
+import com.firewalldns.engine.android.SmoltcpDnsTcpMetrics
 import com.firewalldns.engine.android.TunDataPlaneCoordinator
 import com.firewalldns.engine.android.TunDataPlaneMetrics
 import com.firewalldns.engine.android.TunDataPlaneSecurityConfig
@@ -124,12 +127,13 @@ class FirewallDnsVpnService : VpnService() {
             allowLoopbackUpstreamsForTesting = false,
         )
 
+        val appIdentityResolver = AndroidAppIdentityResolver(this)
         val coordinator = when (
             val activation = TunDataPlaneCoordinator.createValidated(
                 engine = runtime.engine,
                 rawProtector = runtime.socketProtector,
                 securityConfig = securityConfig,
-                appIdentityResolver = AndroidAppIdentityResolver(this),
+                appIdentityResolver = appIdentityResolver,
             )
         ) {
             is TunDataPlaneCoordinator.ActivationResult.Activated -> activation.coordinator
@@ -174,6 +178,64 @@ class FirewallDnsVpnService : VpnService() {
                 }
             }
         }
+        val nativeTransport = runCatching {
+            NativeTcpDnsTransport.create(
+                mtu = 1500,
+                tunDnsIpv4 = byteArrayOf(10, 77, 0, 1),
+                tunClientIpv4 = byteArrayOf(10, 77, 0, 2),
+                tunDnsIpv6 = byteArrayOf(
+                    0xfd.toByte(), 0x77, 0, 0, 0, 0, 0, 0,
+                    0, 0, 0, 0, 0, 0, 0, 1,
+                ),
+                tunClientIpv6 = byteArrayOf(
+                    0xfd.toByte(), 0x77, 0, 0, 0, 0, 0, 0,
+                    0, 0, 0, 0, 0, 0, 0, 2,
+                ),
+                maxSessions = 64,
+            )
+        }.getOrNull()
+        if (nativeTransport == null) {
+            running.set(false)
+            coordinator.close()
+            runCatching { pfd.close() }
+            tunInterface = null
+            broadcastState(state = "native_tcp_engine_unavailable", runtime = runtime, validation = coordinator.validation)
+            if (Build.VERSION.SDK_INT >= 24) stopForeground(STOP_FOREGROUND_REMOVE)
+            stopSelf()
+            return
+        }
+
+        val ownerWake = ArrayBlockingQueue<Unit>(1)
+        val tcpCoordinator = SmoltcpDnsTcpCoordinator(
+            transport = nativeTransport,
+            evaluateDns = runtime.engine::evaluateDns,
+            resolveAppPackage = { sourceAddress, sourcePort, destinationAddress, destinationPort ->
+                appIdentityResolver.resolveAppPackage(
+                    protocol = 6,
+                    sourceAddress = sourceAddress,
+                    sourcePort = sourcePort,
+                    destinationAddress = destinationAddress,
+                    destinationPort = destinationPort,
+                )
+            },
+            exchangeUpstream = coordinator::exchangeProtectedUpstream,
+            onTunPacket = ::writePacketToTun,
+            wakeOwner = { ownerWake.offer(Unit) },
+            maxSessions = 64,
+        )
+        val tcpOwner = thread(name = "firewalldns-smoltcp-owner") {
+            while (running.get()) {
+                try {
+                    ownerWake.poll(10, TimeUnit.MILLISECONDS)
+                } catch (_: InterruptedException) {
+                    break
+                }
+                if (!running.get()) break
+                runCatching { tcpCoordinator.pollOwner() }
+                    .onFailure { processorFailed.incrementAndGet() }
+            }
+        }
+
 
         val tick = thread(name = "firewalldns-prod-tick") {
             while (running.get()) {
@@ -199,6 +261,7 @@ class FirewallDnsVpnService : VpnService() {
                     runtime = runtime,
                     validation = coordinator.validation,
                     dataPlaneMetrics = coordinator.metrics(),
+                    smoltcpMetrics = tcpCoordinator.metrics(),
                 )
                 try {
                     Thread.sleep(500)
@@ -209,6 +272,42 @@ class FirewallDnsVpnService : VpnService() {
         }
         statusThread = status
 
+        // TCP/53 packets that enter smoltcp are handed off synchronously from the
+        // TUN reader so SYN/ACK/data ordering is preserved before the native queue.
+        // DNS UDP and the legacy fragmented-TCP fallback remain on bounded workers.
+        fun processTunPacket(packet: ByteArray, read: Int, isDnsTcp: Boolean) {
+            if (!running.get()) {
+                stoppedBeforeResponse.incrementAndGet()
+                return
+            }
+            try {
+                when (val result = coordinator.onPacket(
+                    packet,
+                    read,
+                    processTcp = !isDnsTcp,
+                )) {
+                    is TunDataPlaneCoordinator.PacketHandlingResult.Responses -> {
+                        diagnosticMetrics.recordProcessingOutcome(result.outcome)
+                        for (out in result.packets) writePacketToTun(out)
+                    }
+                    is TunDataPlaneCoordinator.PacketHandlingResult.Consumed -> {
+                        diagnosticMetrics.recordProcessingOutcome(result.outcome)
+                        if (isDnsTcp && result.outcome == "dns_tcp_delegated_to_smoltcp") {
+                            if (tcpCoordinator.offerPacket(packet, read) != NativeTcpDnsTransport.RESULT_OK) {
+                                queueRejected.incrementAndGet()
+                            }
+                        }
+                    }
+                    is TunDataPlaneCoordinator.PacketHandlingResult.BlockedOrDropped -> {
+                        diagnosticMetrics.recordProcessingOutcome(result.outcome)
+                        for (out in result.responsePackets) writePacketToTun(out)
+                    }
+                }
+            } catch (_: Throwable) {
+                processorFailed.incrementAndGet()
+            }
+        }
+
         thread(name = "firewalldns-prod-tun-reader") {
             val buffer = ByteArray(4096)
             try {
@@ -218,33 +317,13 @@ class FirewallDnsVpnService : VpnService() {
                     val packet = buffer.copyOf(read)
                     packetsIn.incrementAndGet()
                     diagnosticMetrics.record(packet, read)
+                    val isDnsTcp = isDnsTcpPacket(packet, read)
                     try {
-                        workers.execute {
-                            if (!running.get()) {
-                                stoppedBeforeResponse.incrementAndGet()
-                                return@execute
-                            }
-                            try {
-                                when (val result = coordinator.onPacket(packet, read)) {
-                                    is TunDataPlaneCoordinator.PacketHandlingResult.Responses -> {
-                                        diagnosticMetrics.recordProcessingOutcome(result.outcome)
-                                        for (out in result.packets) {
-                                            writePacketToTun(out)
-                                        }
-                                    }
-                                    is TunDataPlaneCoordinator.PacketHandlingResult.Consumed -> {
-                                        diagnosticMetrics.recordProcessingOutcome(result.outcome)
-                                    }
-                                    is TunDataPlaneCoordinator.PacketHandlingResult.BlockedOrDropped -> {
-                                        diagnosticMetrics.recordProcessingOutcome(result.outcome)
-                                        for (out in result.responsePackets) {
-                                            writePacketToTun(out)
-                                        }
-                                    }
-                                }
-                            } catch (_: Throwable) {
-                                processorFailed.incrementAndGet()
-                            }
+                        if (isDnsTcp) {
+                            // Do not reorder SYN, ACK or stream segments before smoltcp.
+                            processTunPacket(packet, read, isDnsTcp = true)
+                        } else {
+                            workers.execute { processTunPacket(packet, read, isDnsTcp = false) }
                         }
                     } catch (_: Throwable) {
                         queueRejected.incrementAndGet()
@@ -258,6 +337,9 @@ class FirewallDnsVpnService : VpnService() {
                 status.interrupt()
                 if (tickThread === tick) tickThread = null
                 if (statusThread === status) statusThread = null
+                tcpOwner.interrupt()
+                runCatching { tcpOwner.join(1_000) }
+                tcpCoordinator.close()
                 coordinator.close()
                 workers.shutdownNow()
                 runCatching { pfd.close() }
@@ -267,10 +349,59 @@ class FirewallDnsVpnService : VpnService() {
                     runtime = runtime,
                     validation = coordinator.validation,
                     dataPlaneMetrics = coordinator.metrics(),
+                    smoltcpMetrics = tcpCoordinator.metrics(),
                 )
                 if (Build.VERSION.SDK_INT >= 24) stopForeground(STOP_FOREGROUND_REMOVE)
                 stopSelf()
             }
+        }
+    }
+
+    private fun isDnsTcpPacket(packet: ByteArray, length: Int): Boolean {
+        if (length < 20 || length > packet.size) return false
+        return when ((packet[0].toInt() ushr 4) and 0x0f) {
+            4 -> {
+                if (length < 20) return false
+                val headerLength = (packet[0].toInt() and 0x0f) * 4
+                if (headerLength < 20 || headerLength + 4 > length) return false
+                if ((packet[9].toInt() and 0xff) != 6) return false
+                val fragment = ((packet[6].toInt() and 0xff) shl 8) or (packet[7].toInt() and 0xff)
+                // Fragmented TCP is reassembled and handled by the diagnostic fallback;
+                // only complete packets may enter smoltcp's ordered ingress queue.
+                if ((fragment and 0x3fff) != 0) return false
+                val destinationPort = ((packet[headerLength + 2].toInt() and 0xff) shl 8) or
+                    (packet[headerLength + 3].toInt() and 0xff)
+                destinationPort == 53
+            }
+            6 -> {
+                if (length < 40) return false
+                var nextHeader = packet[6].toInt() and 0xff
+                var offset = 40
+                val payloadLength = ((packet[4].toInt() and 0xff) shl 8) or
+                    (packet[5].toInt() and 0xff)
+                val end = (40 + payloadLength).coerceAtMost(length)
+                var extensions = 0
+                while (nextHeader in IPV6_EXTENSION_HEADERS) {
+                    if (++extensions > 8 || offset + 2 > end) return false
+                    // Fragment headers (including atomic fragments) stay on the
+                    // reassembly/legacy path; smoltcp receives only unfragmented IP packets.
+                    if (nextHeader == 44) return false
+                    val following = packet[offset].toInt() and 0xff
+                    val extensionLength = if (nextHeader == 51) {
+                        ((packet[offset + 1].toInt() and 0xff) + 2) * 4
+                    } else {
+                        ((packet[offset + 1].toInt() and 0xff) + 1) * 8
+                    }
+                    if (extensionLength < 8 || offset + extensionLength > end) return false
+                    nextHeader = following
+                    offset += extensionLength
+                }
+                if (nextHeader != 6 || offset + 4 > end) return false
+                val destinationPort = ((packet[offset + 2].toInt() and 0xff) shl 8) or
+                    (packet[offset + 3].toInt() and 0xff)
+                destinationPort == 53
+            }
+            else -> false
         }
     }
 
@@ -300,6 +431,7 @@ class FirewallDnsVpnService : VpnService() {
         runtime: AndroidEngineRuntime? = null,
         validation: TunDataPlaneValidationResult? = null,
         dataPlaneMetrics: TunDataPlaneMetrics? = null,
+        smoltcpMetrics: SmoltcpDnsTcpMetrics? = null,
     ) {
         val m = runtime?.engine?.metrics()
         val valJson = if (validation != null) {
@@ -340,6 +472,16 @@ class FirewallDnsVpnService : VpnService() {
             putExtra("dns_tcp_sessions_active", dataPlaneMetrics?.tcpStack?.activeSessions ?: 0)
             putExtra("dns_tcp_queries_processed", dataPlaneMetrics?.tcpStack?.dnsQueriesProcessed ?: 0L)
             putExtra("dns_tcp_retransmissions", dataPlaneMetrics?.tcpStack?.retransmissions ?: 0L)
+            putExtra("smoltcp_dns_tcp_sessions_active", smoltcpMetrics?.activeSessions ?: 0)
+            putExtra("smoltcp_dns_tcp_packets_accepted", smoltcpMetrics?.packetsAccepted ?: 0L)
+            putExtra("smoltcp_dns_tcp_ingress_rejected", smoltcpMetrics?.ingressRejected ?: 0L)
+            putExtra("smoltcp_dns_tcp_sessions_opened", smoltcpMetrics?.sessionsOpened ?: 0L)
+            putExtra("smoltcp_dns_tcp_sessions_closed", smoltcpMetrics?.sessionsClosed ?: 0L)
+            putExtra("smoltcp_dns_tcp_data_events", smoltcpMetrics?.dataEvents ?: 0L)
+            putExtra("smoltcp_dns_tcp_peer_half_closes", smoltcpMetrics?.peerHalfCloses ?: 0L)
+            putExtra("smoltcp_dns_tcp_responses_queued", smoltcpMetrics?.responsesQueued ?: 0L)
+            putExtra("smoltcp_dns_tcp_response_failures", smoltcpMetrics?.responseFailures ?: 0L)
+            putExtra("smoltcp_dns_tcp_native_errors", smoltcpMetrics?.nativeErrors ?: 0L)
             putExtra("active_flows", dataPlaneMetrics?.flows?.activeFlows ?: 0)
             putExtra("flows_opened", dataPlaneMetrics?.flows?.totalOpened ?: 0L)
             putExtra("app_identity_resolved", dataPlaneMetrics?.appIdentity?.resolved ?: 0L)
@@ -371,6 +513,7 @@ class FirewallDnsVpnService : VpnService() {
     }
 
     companion object {
+        private val IPV6_EXTENSION_HEADERS = setOf(0, 43, 44, 51, 60)
         const val ACTION_START = "com.firewalldns.diagnostics.PROD_VPN_START"
         const val ACTION_STOP = "com.firewalldns.diagnostics.PROD_VPN_STOP"
         const val ACTION_STATUS = "com.firewalldns.diagnostics.PROD_VPN_STATUS"

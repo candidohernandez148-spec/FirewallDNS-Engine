@@ -9,6 +9,7 @@ on:
       - "android-adapter/**"
       - "dns-engine/**"
       - "engine-runtime/**"
+      - "app/**"
       - ".github/workflows/engine-core.yml"
   push:
     branches: [main]
@@ -35,6 +36,16 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "8.12"
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+      - name: Install Android NDK for Rust JNI
+        run: |
+          sdkmanager --install "ndk;27.2.12479018"
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/27.2.12479018" >> "$GITHUB_ENV"
+      - name: Install cargo-ndk
+        run: cargo install cargo-ndk --locked
       - name: Run JVM unit tests
         run: gradle test
       - name: Generate ephemeral debug keystore for diagnostics APK

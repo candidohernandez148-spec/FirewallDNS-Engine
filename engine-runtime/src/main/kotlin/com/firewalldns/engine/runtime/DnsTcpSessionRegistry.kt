@@ -104,6 +104,22 @@ class DnsTcpSessionRegistry(
             frames
         }
 
+    /** Returns false and removes the entry when its worker has failed or closed. */
+    fun isActive(sessionId: Long): Boolean = synchronized(lock) {
+        val entry = sessions[sessionId] ?: return@synchronized false
+        if (entry.worker.isClosed) {
+            sessions.remove(sessionId)
+            false
+        } else {
+            true
+        }
+    }
+
+    /** True only when no input, processing work, or undrained response remains. */
+    fun isIdle(sessionId: Long): Boolean = synchronized(lock) {
+        sessions[sessionId]?.worker?.isIdle ?: true
+    }
+
     /** FIN, RST, or transport teardown must close the matching session. */
     fun closeSession(sessionId: Long): Boolean {
         val entry = synchronized(lock) { sessions.remove(sessionId) } ?: return false

@@ -9,11 +9,16 @@ Deterministic DNS filtering, threat reputation, runtime orchestration, and Andro
 - **`:engine-monitor`**: Bounded non-blocking local event queue and counters (`EngineMonitor`).
 - **`:dns-engine`**: RFC 1035 DNS message parser (`DnsMessageParser`), decision/response caches (`DnsDecisionCache`, `DnsResponseCache`), policy NXDOMAIN synthesizer (`DnsPolicyAdapter`), upstream UDP/TCP client (`DnsUpstreamClient`), failover client (`DnsUpstreamFailoverClient`), and exchange cancellation.
 - **`:engine-runtime`**: Unified `EngineRuntime` facade coordinating policy evaluation, threat signals, and monitoring.
-- **`:android-adapter`**: `VpnService.protect()` socket protector (`AndroidDnsSocketProtector`, `AuditedDnsSocketProtector`), `AndroidEngineRuntime`, IPv4/IPv6 fragment reassembler (`IpFragmentReassembler`), UDP/53 TUN processor (`TunDnsPacketProcessor`), and the diagnostic data-plane coordinator. The current Kotlin TCP stack is a temporary diagnostic reference; the target TCP transport is smoltcp in `rust-core` and is not yet connected to the Android TUN.
+- **`:android-adapter`**: `VpnService.protect()` socket protector (`AndroidDnsSocketProtector`, `AuditedDnsSocketProtector`), `AndroidEngineRuntime`, IPv4/IPv6 fragment reassembler (`IpFragmentReassembler`), UDP/53 TUN processor (`TunDnsPacketProcessor`), the smoltcp 0.14 JNI transport (`NativeTcpDnsTransport`) and the per-session DNS TCP bridge (`SmoltcpDnsTcpCoordinator`). The diagnostics APK routes DNS TCP/53 through smoltcp; the production FirewallDNS app service is still not integrated.
 - **`:app`**: Android VPN & diagnostics application (`PublicDnsActivity`, `MainActivity`, `FirewallDnsVpnService`, `EngineTunVpnService`, `TunDiagnosticVpnService`, `UdpTunBridgeDiagnosticService`, benchmarks, and traffic classifier).
 
 ## Build
 
+The diagnostics APK currently targets ARM64. Install Rust 1.91+, Android NDK 27.2.12479018 and cargo-ndk before building:
+
 ```bash
+cargo install cargo-ndk --locked
 ./gradlew :app:assembleDebug
 ```
+
+See [smoltcp Android JNI](docs/SMOLTCP_ANDROID_JNI.md) for thread ownership, event format, limits and test coverage.
