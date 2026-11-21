@@ -296,6 +296,9 @@ impl TcpDnsTransport {
         if session.closing {
             return true;
         }
+        if !abort && session.outbound_bytes > 0 {
+            return false;
+        }
         let socket = self.sockets.get_mut::<tcp::Socket>(session.handle);
         if abort {
             socket.abort();
