@@ -272,6 +272,42 @@ class FirewallDnsVpnService : VpnService() {
         }
         statusThread = status
 
+        // TCP/53 packets that enter smoltcp are handed off synchronously from the
+        // TUN reader so SYN/ACK/data ordering is preserved before the native queue.
+        // DNS UDP and the legacy fragmented-TCP fallback remain on bounded workers.
+        fun processTunPacket(packet: ByteArray, read: Int, isDnsTcp: Boolean) {
+            if (!running.get()) {
+                stoppedBeforeResponse.incrementAndGet()
+                return
+            }
+            try {
+                when (val result = coordinator.onPacket(
+                    packet,
+                    read,
+                    processTcp = !isDnsTcp,
+                )) {
+                    is TunDataPlaneCoordinator.PacketHandlingResult.Responses -> {
+                        diagnosticMetrics.recordProcessingOutcome(result.outcome)
+                        for (out in result.packets) writePacketToTun(out)
+                    }
+                    is TunDataPlaneCoordinator.PacketHandlingResult.Consumed -> {
+                        diagnosticMetrics.recordProcessingOutcome(result.outcome)
+                        if (isDnsTcp && result.outcome == "dns_tcp_delegated_to_smoltcp") {
+                            if (tcpCoordinator.offerPacket(packet, read) != NativeTcpDnsTransport.RESULT_OK) {
+                                queueRejected.incrementAndGet()
+                            }
+                        }
+                    }
+                    is TunDataPlaneCoordinator.PacketHandlingResult.BlockedOrDropped -> {
+                        diagnosticMetrics.recordProcessingOutcome(result.outcome)
+                        for (out in result.responsePackets) writePacketToTun(out)
+                    }
+                }
+            } catch (_: Throwable) {
+                processorFailed.incrementAndGet()
+            }
+        }
+
         thread(name = "firewalldns-prod-tun-reader") {
             val buffer = ByteArray(4096)
             try {
@@ -281,43 +317,13 @@ class FirewallDnsVpnService : VpnService() {
                     val packet = buffer.copyOf(read)
                     packetsIn.incrementAndGet()
                     diagnosticMetrics.record(packet, read)
+                    val isDnsTcp = isDnsTcpPacket(packet, read)
                     try {
-                        workers.execute {
-                            if (!running.get()) {
-                                stoppedBeforeResponse.incrementAndGet()
-                                return@execute
-                            }
-                            try {
-                                val isDnsTcp = isDnsTcpPacket(packet, read)
-                                when (val result = coordinator.onPacket(
-                                    packet,
-                                    read,
-                                    processTcp = !isDnsTcp,
-                                )) {
-                                    is TunDataPlaneCoordinator.PacketHandlingResult.Responses -> {
-                                        diagnosticMetrics.recordProcessingOutcome(result.outcome)
-                                        for (out in result.packets) {
-                                            writePacketToTun(out)
-                                        }
-                                    }
-                                    is TunDataPlaneCoordinator.PacketHandlingResult.Consumed -> {
-                                        diagnosticMetrics.recordProcessingOutcome(result.outcome)
-                                        if (isDnsTcp && result.outcome == "dns_tcp_delegated_to_smoltcp") {
-                                            if (tcpCoordinator.offerPacket(packet, read) != NativeTcpDnsTransport.RESULT_OK) {
-                                                queueRejected.incrementAndGet()
-                                            }
-                                        }
-                                    }
-                                    is TunDataPlaneCoordinator.PacketHandlingResult.BlockedOrDropped -> {
-                                        diagnosticMetrics.recordProcessingOutcome(result.outcome)
-                                        for (out in result.responsePackets) {
-                                            writePacketToTun(out)
-                                        }
-                                    }
-                                }
-                            } catch (_: Throwable) {
-                                processorFailed.incrementAndGet()
-                            }
+                        if (isDnsTcp) {
+                            // Do not reorder SYN, ACK or stream segments before smoltcp.
+                            processTunPacket(packet, read, isDnsTcp = true)
+                        } else {
+                            workers.execute { processTunPacket(packet, read, isDnsTcp = false) }
                         }
                     } catch (_: Throwable) {
                         queueRejected.incrementAndGet()
@@ -360,7 +366,9 @@ class FirewallDnsVpnService : VpnService() {
                 if (headerLength < 20 || headerLength + 4 > length) return false
                 if ((packet[9].toInt() and 0xff) != 6) return false
                 val fragment = ((packet[6].toInt() and 0xff) shl 8) or (packet[7].toInt() and 0xff)
-                if ((fragment and 0x1fff) != 0) return false
+                // Fragmented TCP is reassembled and handled by the diagnostic fallback;
+                // only complete packets may enter smoltcp's ordered ingress queue.
+                if ((fragment and 0x3fff) != 0) return false
                 val destinationPort = ((packet[headerLength + 2].toInt() and 0xff) shl 8) or
                     (packet[headerLength + 3].toInt() and 0xff)
                 destinationPort == 53
@@ -375,15 +383,9 @@ class FirewallDnsVpnService : VpnService() {
                 var extensions = 0
                 while (nextHeader in IPV6_EXTENSION_HEADERS) {
                     if (++extensions > 8 || offset + 2 > end) return false
-                    if (nextHeader == 44) {
-                        if (offset + 8 > end) return false
-                        val fragmentOffset = ((packet[offset + 2].toInt() and 0xff) shl 8) or
-                            (packet[offset + 3].toInt() and 0xff)
-                        if ((fragmentOffset and 0xfff8) != 0) return false
-                        nextHeader = packet[offset].toInt() and 0xff
-                        offset += 8
-                        continue
-                    }
+                    // Fragment headers (including atomic fragments) stay on the
+                    // reassembly/legacy path; smoltcp receives only unfragmented IP packets.
+                    if (nextHeader == 44) return false
                     val following = packet[offset].toInt() and 0xff
                     val extensionLength = if (nextHeader == 51) {
                         ((packet[offset + 1].toInt() and 0xff) + 2) * 4
