@@ -8,6 +8,7 @@
 mod tun_device;
 mod udp_packet;
 mod l4_packet;
+mod native_tcp_jni;
 mod tcp_dns_transport;
 
 pub use tun_device::{TunPacketDevice, TunQueueError};
