@@ -1,13 +1,14 @@
-//! Experimental native packet preflight for FirewallDNS.
+//! Native packet validation and smoltcp DNS/TCP transport laboratory for FirewallDNS.
 //!
-//! This crate validates unfragmented UDP DNS packets and exposes a unified
-//! IPv4/IPv6 TCP + UDP transport validator. It is not a TCP/IP stack, does not
-//! manage flows, and does not make policy decisions. Kotlin remains the
-//! production authority until parity and device benchmarks justify migration.
+//! The TCP transport is a single-owner state machine with bounded queues. It
+//! does not open upstream sockets or make DNS policy decisions; Android/Kotlin
+//! remains responsible for protected upstream exchanges and production VPN
+//! integration until end-to-end device validation is complete.
 
 mod tun_device;
 mod udp_packet;
 mod l4_packet;
+mod tcp_dns_transport;
 
 pub use tun_device::{TunPacketDevice, TunQueueError};
 pub use udp_packet::{parse_udp_packet, UdpDatagram, UdpPacketError};
