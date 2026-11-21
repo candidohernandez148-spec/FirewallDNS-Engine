@@ -26,6 +26,8 @@ class DnsTcpSessionWorker(
     }
 
     private val closed = AtomicBoolean(false)
+    private val processing = AtomicBoolean(false)
+    private var pendingWork = false
     private val inputLock = Any()
     private val input = ArrayBlockingQueue<ByteArray>(maxQueuedInputChunks)
     private val inputBytes = AtomicInteger(0)
@@ -48,6 +50,11 @@ class DnsTcpSessionWorker(
     }
 
     val isClosed: Boolean get() = closed.get()
+    val isIdle: Boolean
+        get() = synchronized(inputLock) {
+            !pendingWork && !processing.get() && input.isEmpty() &&
+                synchronized(outputLock) { output.isEmpty() }
+        }
     val closeReason: String? get() = terminalReason
     val queuedInputBytes: Int get() = inputBytes.get()
     val queuedResponseBytes: Int
@@ -66,6 +73,7 @@ class DnsTcpSessionWorker(
                 return OfferResult.Closed(terminalReason!!)
             }
             inputBytes.set(nextBytes)
+            pendingWork = true
             if (!input.offer(bytes.copyOf(length))) {
                 inputBytes.addAndGet(-length)
                 closeLocked("dns_tcp_worker_queue_full")
@@ -78,14 +86,19 @@ class DnsTcpSessionWorker(
     /** Called only by the smoltcp owner thread; byte chunks remain FIFO ordered. */
     fun drainResponses(maxFrames: Int = DEFAULT_DRAIN_BATCH): List<ByteArray> {
         require(maxFrames in 1..MAX_DRAIN_BATCH)
-        synchronized(outputLock) {
-            val drained = ArrayList<ByteArray>(minOf(maxFrames, output.size))
-            repeat(minOf(maxFrames, output.size)) {
-                val frame = output.removeFirst()
-                outputBytes -= frame.size
-                drained += frame
+        synchronized(inputLock) {
+            synchronized(outputLock) {
+                val drained = ArrayList<ByteArray>(minOf(maxFrames, output.size))
+                repeat(minOf(maxFrames, output.size)) {
+                    val frame = output.removeFirst()
+                    outputBytes -= frame.size
+                    drained += frame
+                }
+                if (output.isEmpty() && input.isEmpty() && !processing.get()) {
+                    pendingWork = false
+                }
+                return drained
             }
-            return drained
         }
     }
 
@@ -109,6 +122,7 @@ class DnsTcpSessionWorker(
             output.clear()
             outputBytes = 0
         }
+        pendingWork = false
         runCatching(cancelUpstream)
         worker.interrupt()
     }
@@ -129,26 +143,38 @@ class DnsTcpSessionWorker(
                 }
                 if (stopAfterTake || closed.get()) break
 
-                var result = processor.onIncomingBytes(chunk)
-                while (!closed.get()) {
-                    when (result) {
-                        is DnsTcpSessionProcessor.ProcessResult.Processed -> {
-                            val bytes = processor.pollOutbound(processor.maxPendingOutboundBytes)
-                            if (!enqueueFramedResponses(bytes)) return
-                            if (!result.hasMoreWork) break
-                            result = processor.processPendingFrames()
+                processing.set(true)
+                try {
+                    var result = processor.onIncomingBytes(chunk)
+                    while (!closed.get()) {
+                        when (result) {
+                            is DnsTcpSessionProcessor.ProcessResult.Processed -> {
+                                val bytes = processor.pollOutbound(processor.maxPendingOutboundBytes)
+                                if (!enqueueFramedResponses(bytes)) return
+                                if (!result.hasMoreWork) break
+                                result = processor.processPendingFrames()
+                            }
+                            DnsTcpSessionProcessor.ProcessResult.Backpressure -> {
+                                closeWith("dns_tcp_worker_processor_backpressure")
+                                return
+                            }
+                            DnsTcpSessionProcessor.ProcessResult.Closed -> {
+                                closeWith("dns_tcp_processor_closed")
+                                return
+                            }
+                            is DnsTcpSessionProcessor.ProcessResult.TerminalError -> {
+                                closeWith(result.reason)
+                                return
+                            }
                         }
-                        DnsTcpSessionProcessor.ProcessResult.Backpressure -> {
-                            closeWith("dns_tcp_worker_processor_backpressure")
-                            return
-                        }
-                        DnsTcpSessionProcessor.ProcessResult.Closed -> {
-                            closeWith("dns_tcp_processor_closed")
-                            return
-                        }
-                        is DnsTcpSessionProcessor.ProcessResult.TerminalError -> {
-                            closeWith(result.reason)
-                            return
+                    }
+                } finally {
+                    processing.set(false)
+                    synchronized(inputLock) {
+                        if (input.isEmpty()) {
+                            synchronized(outputLock) {
+                                if (output.isEmpty()) pendingWork = false
+                            }
                         }
                     }
                 }
