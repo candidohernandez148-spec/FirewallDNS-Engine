@@ -240,15 +240,19 @@ pub extern "system" fn Java_com_firewalldns_engine_android_NativeTcpDnsTransport
     packet: JByteArray<'_>,
     length: jint,
 ) -> jint {
-    if length <= 0 {
-        return INVALID_ARGUMENT;
-    }
     let Some(engine) = engine_for(handle) else {
         return INVALID_HANDLE;
     };
+    if length <= 0 {
+        engine.rejected_packets.fetch_add(1, Ordering::Relaxed);
+        return INVALID_ARGUMENT;
+    }
     let bytes = match env.convert_byte_array(&packet) {
         Ok(bytes) if length as usize <= bytes.len() => bytes[..length as usize].to_vec(),
-        _ => return INVALID_ARGUMENT,
+        _ => {
+            engine.rejected_packets.fetch_add(1, Ordering::Relaxed);
+            return INVALID_ARGUMENT;
+        }
     };
     let Ok(mut ingress) = engine.ingress.lock() else {
         return INVALID_HANDLE;
