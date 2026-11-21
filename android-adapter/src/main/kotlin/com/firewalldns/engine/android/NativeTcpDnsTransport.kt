@@ -139,6 +139,8 @@ class NativeTcpDnsTransport private constructor(
             tunClientIpv6: ByteArray,
             maxSessions: Int = 64,
         ): NativeTcpDnsTransport? {
+            require(mtu in 576..9000) { "MTU must be in 576..9000 bytes" }
+            require(maxSessions in 1..256) { "maxSessions must be in 1..256" }
             require(tunDnsIpv4.size == 4 && tunClientIpv4.size == 4)
             require(tunDnsIpv6.size == 16 && tunClientIpv6.size == 16)
             val factory = NativeTcpDnsTransport(0L)
