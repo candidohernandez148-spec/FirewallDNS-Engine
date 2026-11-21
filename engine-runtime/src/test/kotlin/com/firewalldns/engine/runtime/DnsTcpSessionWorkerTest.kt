@@ -50,6 +50,38 @@ class DnsTcpSessionWorkerTest {
     }
 
     @Test
+    fun reportsIdleOnlyAfterProcessingAndResponseDrainComplete() {
+        val ready = CountDownLatch(1)
+        val query = query("idle-worker.example")
+        val processor = DnsTcpSessionProcessor(
+            policyAdapter = DnsPolicyAdapter(PolicyEngine(emptyList())),
+            exchangeUpstream = { message, _ ->
+                DnsUpstreamResult.Success(DnsUpstreamResponse(response(message), DnsUpstreamTransport.TCP))
+            },
+        )
+        val worker = DnsTcpSessionWorker(
+            processor = processor,
+            cancelUpstream = {},
+            onResponsesAvailable = { ready.countDown() },
+        )
+
+        try {
+            assertTrue(worker.isIdle)
+            assertEquals(DnsTcpSessionWorker.OfferResult.Accepted, worker.offer(DnsTcpFrameCodec.encode(query)))
+            assertTrue(ready.await(2, TimeUnit.SECONDS))
+            assertTrue(!worker.isIdle, "queued responses are still outstanding")
+            assertEquals(1, worker.drainResponses().size)
+            val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(2)
+            while (!worker.isIdle && System.nanoTime() < deadline) {
+                Thread.sleep(1)
+            }
+            assertTrue(worker.isIdle, "worker should become idle after processing and response drain")
+        } finally {
+            worker.close()
+        }
+    }
+
+    @Test
     fun closesAndCancelsUpstreamWhenInputQueueWouldLoseStreamBytes() {
         val upstreamStarted = CountDownLatch(1)
         val cancelCalled = CountDownLatch(1)
