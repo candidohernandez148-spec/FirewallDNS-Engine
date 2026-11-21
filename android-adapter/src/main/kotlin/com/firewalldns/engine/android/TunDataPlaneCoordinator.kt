@@ -93,7 +93,11 @@ class TunDataPlaneCoordinator private constructor(
     @Volatile
     private var closed = false
 
-    fun onPacket(packet: ByteArray, length: Int = packet.size): PacketHandlingResult {
+    fun onPacket(
+        packet: ByteArray,
+        length: Int = packet.size,
+        processTcp: Boolean = true,
+    ): PacketHandlingResult {
         if (closed) return PacketHandlingResult.BlockedOrDropped("data_plane_closed")
         packetsEntered.incrementAndGet()
 
@@ -128,6 +132,9 @@ class TunDataPlaneCoordinator private constructor(
         }
 
         return if (isTcpPacket(readyPacket, readyLength)) {
+            if (!processTcp) {
+                return PacketHandlingResult.Consumed("dns_tcp_delegated_to_smoltcp")
+            }
             val out = tcpStack.onPacket(readyPacket, readyLength)
             if (out.isEmpty()) {
                 tcpSegmentsConsumed.incrementAndGet()
