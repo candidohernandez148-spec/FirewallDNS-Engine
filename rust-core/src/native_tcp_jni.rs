@@ -138,18 +138,28 @@ pub extern "system" fn Java_com_firewalldns_engine_android_NativeTcpDnsTransport
     mut env: JNIEnv<'_>,
     _receiver: JObject<'_>,
     mtu: jint,
+    tun_dns_ipv4: JByteArray<'_>,
     tun_client_ipv4: JByteArray<'_>,
+    tun_dns_ipv6: JByteArray<'_>,
     tun_client_ipv6: JByteArray<'_>,
     max_sessions: jint,
 ) -> jlong {
     if mtu < 576 || max_sessions <= 0 {
         return 0;
     }
-    let ipv4 = match env.convert_byte_array(&tun_client_ipv4) {
+    let dns_ipv4 = match env.convert_byte_array(&tun_dns_ipv4) {
         Ok(bytes) if bytes.len() == 4 => Ipv4Address::new(bytes[0], bytes[1], bytes[2], bytes[3]),
         _ => return 0,
     };
-    let ipv6 = match env.convert_byte_array(&tun_client_ipv6) {
+    let client_ipv4 = match env.convert_byte_array(&tun_client_ipv4) {
+        Ok(bytes) if bytes.len() == 4 => Ipv4Address::new(bytes[0], bytes[1], bytes[2], bytes[3]),
+        _ => return 0,
+    };
+    let dns_ipv6 = match env.convert_byte_array(&tun_dns_ipv6) {
+        Ok(bytes) if bytes.len() == 16 => parse_ipv6(&bytes),
+        _ => return 0,
+    };
+    let client_ipv6 = match env.convert_byte_array(&tun_client_ipv6) {
         Ok(bytes) if bytes.len() == 16 => {
             let words = [
                 u16::from_be_bytes([bytes[0], bytes[1]]),
@@ -168,7 +178,14 @@ pub extern "system" fn Java_com_firewalldns_engine_android_NativeTcpDnsTransport
         }
         _ => return 0,
     };
-    let transport = match TcpDnsTransport::new(mtu as usize, ipv4, ipv6, max_sessions as usize) {
+    let transport = match TcpDnsTransport::new(
+        mtu as usize,
+        dns_ipv4,
+        client_ipv4,
+        dns_ipv6,
+        client_ipv6,
+        max_sessions as usize,
+    ) {
         Ok(transport) => transport,
         Err(_) => return 0,
     };

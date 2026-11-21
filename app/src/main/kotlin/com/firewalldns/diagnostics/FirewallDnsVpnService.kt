@@ -181,7 +181,12 @@ class FirewallDnsVpnService : VpnService() {
         val nativeTransport = runCatching {
             NativeTcpDnsTransport.create(
                 mtu = 1500,
+                tunDnsIpv4 = byteArrayOf(10, 77, 0, 1),
                 tunClientIpv4 = byteArrayOf(10, 77, 0, 2),
+                tunDnsIpv6 = byteArrayOf(
+                    0xfd.toByte(), 0x77, 0, 0, 0, 0, 0, 0,
+                    0, 0, 0, 0, 0, 0, 0, 1,
+                ),
                 tunClientIpv6 = byteArrayOf(
                     0xfd.toByte(), 0x77, 0, 0, 0, 0, 0, 0,
                     0, 0, 0, 0, 0, 0, 0, 2,

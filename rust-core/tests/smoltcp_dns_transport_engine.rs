@@ -101,7 +101,7 @@ fn ipv4_tcp_dns_handshake_stream_event_and_response_roundtrip() {
         SocketBuffer::new(vec![0; 8192]),
         SocketBuffer::new(vec![0; 8192]),
     ));
-    let mut engine = TcpDnsTransport::new(1500, CLIENT_V4, CLIENT_V6, 8).unwrap();
+    let mut engine = TcpDnsTransport::new(1500, SERVER_V4, CLIENT_V4, SERVER_V6, CLIENT_V6, 8).unwrap();
 
     client_sockets.get_mut::<TcpSocket>(client_handle)
         .connect(

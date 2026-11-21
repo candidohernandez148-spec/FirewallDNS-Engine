@@ -127,7 +127,9 @@ impl TcpDnsTransport {
     /// The default routes point back to the VPN client's assigned addresses.
     pub fn new(
         mtu: usize,
+        tun_dns_ipv4: Ipv4Address,
         tun_client_ipv4: Ipv4Address,
+        tun_dns_ipv6: Ipv6Address,
         tun_client_ipv6: Ipv6Address,
         max_sessions: usize,
     ) -> Result<Self, TcpDnsTransportError> {
@@ -149,11 +151,11 @@ impl TcpDnsTransport {
         let mut iface = Interface::new(config, &mut device, Instant::ZERO);
         iface.update_ip_addrs(|addresses| {
             addresses
-                .push(IpCidr::new(IpAddress::Ipv4(Ipv4Address::new(10, 77, 0, 1)), 32))
+                .push(IpCidr::new(IpAddress::Ipv4(tun_dns_ipv4), 32))
                 .expect("smoltcp address capacity supports IPv4");
             addresses
                 .push(IpCidr::new(
-                    IpAddress::Ipv6(Ipv6Address::new(0xfd77, 0, 0, 0, 0, 0, 0, 1)),
+                    IpAddress::Ipv6(tun_dns_ipv6),
                     128,
                 ))
                 .expect("smoltcp address capacity supports IPv6");

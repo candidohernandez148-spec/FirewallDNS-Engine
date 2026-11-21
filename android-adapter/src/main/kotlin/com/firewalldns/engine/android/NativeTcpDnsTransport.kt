@@ -133,21 +133,27 @@ class NativeTcpDnsTransport private constructor(
 
         fun create(
             mtu: Int,
+            tunDnsIpv4: ByteArray,
             tunClientIpv4: ByteArray,
+            tunDnsIpv6: ByteArray,
             tunClientIpv6: ByteArray,
             maxSessions: Int = 64,
         ): NativeTcpDnsTransport? {
-            require(tunClientIpv4.size == 4)
-            require(tunClientIpv6.size == 16)
+            require(tunDnsIpv4.size == 4 && tunClientIpv4.size == 4)
+            require(tunDnsIpv6.size == 16 && tunClientIpv6.size == 16)
             val factory = NativeTcpDnsTransport(0L)
-            val handle = factory.nativeCreate(mtu, tunClientIpv4, tunClientIpv6, maxSessions)
+            val handle = factory.nativeCreate(
+                mtu, tunDnsIpv4, tunClientIpv4, tunDnsIpv6, tunClientIpv6, maxSessions,
+            )
             return handle.takeIf { it > 0L }?.let(::NativeTcpDnsTransport)
         }
     }
 
     private external fun nativeCreate(
         mtu: Int,
+        tunDnsIpv4: ByteArray,
         tunClientIpv4: ByteArray,
+        tunDnsIpv6: ByteArray,
         tunClientIpv6: ByteArray,
         maxSessions: Int,
     ): Long
