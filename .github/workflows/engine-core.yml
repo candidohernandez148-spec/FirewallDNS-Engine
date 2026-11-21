@@ -39,5 +39,13 @@ jobs:
         run: gradle test
       - name: Generate ephemeral debug keystore for diagnostics APK
         run: keytool -genkeypair -noprompt -v -keystore debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+      - name: Install Android NDK for Rust JNI
+        run: |
+          sdkmanager --install "ndk;27.2.12479018"
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/27.2.12479018" >> "$GITHUB_ENV"
+      - name: Install cargo-ndk
+        run: cargo install cargo-ndk --locked
       - name: Assemble Android diagnostics APK
         run: gradle :app:assembleDebug

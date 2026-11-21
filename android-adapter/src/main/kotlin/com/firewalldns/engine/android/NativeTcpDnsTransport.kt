@@ -116,7 +116,7 @@ class NativeTcpDnsTransport private constructor(
             else -> error("Unsupported IP address family")
         }
         require(input.remaining() >= length + 2)
-        return ByteArray(length).also(input::get)
+        return ByteArray(length).also { input.get(it) }
     }
 
     companion object {
