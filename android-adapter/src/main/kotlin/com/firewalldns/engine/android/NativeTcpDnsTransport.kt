@@ -120,7 +120,7 @@ class NativeTcpDnsTransport private constructor(
     }
 
     companion object {
-        private const val RESULT_OK = 1
+        const val RESULT_OK = 1
         private const val ERROR_CLOSED = -100
         private const val EVENT_SESSION_OPENED = 1
         private const val EVENT_DATA = 2

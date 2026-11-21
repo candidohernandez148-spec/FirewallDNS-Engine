@@ -124,7 +124,7 @@ class SmoltcpDnsTcpCoordinator(
         peerHalfCloses = peerHalfCloses.get(),
         responsesQueued = responsesQueued.get(),
         responseFailures = responseFailures.get(),
-        activeSessions = activeSessionIds.size,
+        activeSessions = registry.activeSessionCount,
         nativeErrors = nativeErrors.get(),
     )
 
@@ -183,7 +183,7 @@ class SmoltcpDnsTcpCoordinator(
                             cleanupSession(event.sessionId)
                         }
                         is DnsTcpSessionRegistry.OfferResult.WorkerResult -> {
-                            if (result.result !is DnsTcpSessionWorker.OfferResult.Accepted) {
+                            if (result.result != DnsTcpSessionWorker.OfferResult.Accepted) {
                                 transport.closeSession(event.sessionId, abort = true)
                                 cleanupSession(event.sessionId)
                             }
