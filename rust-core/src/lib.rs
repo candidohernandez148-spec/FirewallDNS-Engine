@@ -204,3 +204,5 @@ mod tests {
         assert_eq!(validate_dns_udp_packet(&packet), INVALID);
     }
 }
+
+pub use tcp_dns_transport::{TcpDnsEvent, TcpDnsFlow, TcpDnsTransport, TcpDnsTransportError, TcpDnsTransportStats};
