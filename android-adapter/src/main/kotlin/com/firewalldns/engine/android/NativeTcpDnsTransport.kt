@@ -139,19 +139,18 @@ class NativeTcpDnsTransport private constructor(
         ): NativeTcpDnsTransport? {
             require(tunClientIpv4.size == 4)
             require(tunClientIpv6.size == 16)
-            val handle = nativeCreate(mtu, tunClientIpv4, tunClientIpv6, maxSessions)
+            val factory = NativeTcpDnsTransport(0L)
+            val handle = factory.nativeCreate(mtu, tunClientIpv4, tunClientIpv6, maxSessions)
             return handle.takeIf { it > 0L }?.let(::NativeTcpDnsTransport)
         }
-
-        @JvmStatic
-        private external fun nativeCreate(
-            mtu: Int,
-            tunClientIpv4: ByteArray,
-            tunClientIpv6: ByteArray,
-            maxSessions: Int,
-        ): Long
     }
 
+    private external fun nativeCreate(
+        mtu: Int,
+        tunClientIpv4: ByteArray,
+        tunClientIpv6: ByteArray,
+        maxSessions: Int,
+    ): Long
     private external fun nativeEnqueuePacket(handle: Long, packet: ByteArray, length: Int): Int
     private external fun nativePoll(handle: Long, nowMillis: Long, maxIngressPackets: Int): Int
     private external fun nativeTakePacket(handle: Long): ByteArray
