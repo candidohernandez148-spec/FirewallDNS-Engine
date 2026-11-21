@@ -1,7 +1,10 @@
 package com.firewalldns.engine.runtime
 
+import com.firewalldns.engine.core.PolicyEngine
+import com.firewalldns.engine.dns.DnsPolicyAdapter
 import com.firewalldns.engine.dns.DnsTcpFrameCodec
-import com.firewalldns.engine.dns.DnsTcpFrameDecode
+import com.firewalldns.engine.dns.DnsTcpSessionProcessor
+import com.firewalldns.engine.dns.DnsTcpStreamDecoder
 import com.firewalldns.engine.dns.DnsUpstreamResponse
 import com.firewalldns.engine.dns.DnsUpstreamResult
 import com.firewalldns.engine.dns.DnsUpstreamTransport
@@ -18,13 +21,11 @@ class DnsTcpSessionRegistryTest {
     @Test
     fun boundsSessionsRejectsDuplicateIdsAndReleasesCapacityOnClose() {
         val registry = registry(maxSessions = 1)
-
         try {
             assertEquals(DnsTcpSessionRegistry.OpenResult.Opened, registry.openSession(10))
             assertEquals(DnsTcpSessionRegistry.OpenResult.AlreadyExists, registry.openSession(10))
             assertEquals(DnsTcpSessionRegistry.OpenResult.CapacityReached, registry.openSession(11))
             assertEquals(1, registry.activeSessionCount)
-
             assertTrue(registry.closeSession(10))
             assertEquals(0, registry.activeSessionCount)
             assertEquals(DnsTcpSessionRegistry.OpenResult.Opened, registry.openSession(11))
@@ -39,7 +40,6 @@ class DnsTcpSessionRegistryTest {
         val registry = registry(onReady = { ready.countDown() })
         val query = query("registry.example")
         val expected = response(query)
-
         try {
             assertEquals(DnsTcpSessionRegistry.OpenResult.Opened, registry.openSession(7))
             assertEquals(
@@ -47,10 +47,11 @@ class DnsTcpSessionRegistryTest {
                 registry.offer(7, DnsTcpFrameCodec.encode(query)),
             )
             assertTrue(ready.await(2, TimeUnit.SECONDS), "session worker should wake transport owner")
-
             val frames = registry.drainResponses(7)
             assertEquals(1, frames.size)
-            val decoded = assertIs<DnsTcpFrameDecode.Complete>(DnsTcpFrameCodec.decode(frames.single()))
+            val decoder = DnsTcpStreamDecoder()
+            assertIs<DnsTcpStreamDecoder.FeedResult.Accepted>(decoder.feed(frames.single()))
+            val decoded = assertIs<DnsTcpStreamDecoder.DrainResult.Frame>(decoder.drainFrame())
             assertContentEquals(expected, decoded.message)
         } finally {
             registry.close()
@@ -66,7 +67,6 @@ class DnsTcpSessionRegistryTest {
             nowNanos = { clock.get() },
             onReady = { ready.countDown() },
         )
-
         try {
             assertEquals(DnsTcpSessionRegistry.OpenResult.Opened, registry.openSession(8))
             assertEquals(
@@ -92,7 +92,6 @@ class DnsTcpSessionRegistryTest {
             idleTimeoutNanos = 10,
             nowNanos = { clock.get() },
         )
-
         try {
             assertEquals(DnsTcpSessionRegistry.OpenResult.Opened, registry.openSession(42))
             clock.set(111)
@@ -108,10 +107,8 @@ class DnsTcpSessionRegistryTest {
     fun closeAllIsIdempotentAndRejectsFurtherSessions() {
         val registry = registry()
         registry.openSession(1)
-
         registry.close()
         registry.close()
-
         assertEquals(0, registry.activeSessionCount)
         assertEquals(DnsTcpSessionRegistry.OpenResult.Closed, registry.openSession(2))
     }
@@ -125,8 +122,8 @@ class DnsTcpSessionRegistryTest {
     ) = DnsTcpSessionRegistry(
         processorFactory = {
             DnsTcpSessionProcessor(
-                engine = EngineRuntime(),
-                exchangeUpstream = { message ->
+                policyAdapter = DnsPolicyAdapter(PolicyEngine(emptyList())),
+                exchangeUpstream = { message, _ ->
                     DnsUpstreamResult.Success(
                         DnsUpstreamResponse(response(message), DnsUpstreamTransport.UDP),
                     )
