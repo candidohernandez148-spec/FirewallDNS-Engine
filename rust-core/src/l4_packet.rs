@@ -162,7 +162,7 @@ pub fn validate_tun_l4_packet(
         if !(20..=transport_len).contains(&header_len) {
             return Err(PacketValidationResult::InvalidL4Length);
         }
-        if transport_checksum(ipv6, &packet[ip_header_len..total_len], source, destination, protocol) != 0 {
+        if transport_checksum(ipv6, transport, source, destination, protocol) != 0 {
             return Err(PacketValidationResult::InvalidL4Checksum);
         }
         header_len
@@ -394,9 +394,9 @@ mod tests {
     }
 
     #[test]
-    fn rejects_ipv6_extension_and_declared_length_mismatch() {
+    fn rejects_ipv6_esp_and_declared_length_mismatch() {
         let mut extension = make_packet(true, IPPROTO_TCP, &[]);
-        extension[6] = 60;
+        extension[6] = 50; // ESP cannot expose the TCP header to the parser
         assert_eq!(
             validate_tun_l4_packet(&extension),
             Err(PacketValidationResult::UnsupportedIpv6Extension)
