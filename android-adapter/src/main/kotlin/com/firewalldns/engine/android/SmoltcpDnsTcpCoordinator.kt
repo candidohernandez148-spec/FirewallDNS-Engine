@@ -3,9 +3,9 @@ package com.firewalldns.engine.android
 import com.firewalldns.engine.dns.DnsExchangeCancellation
 import com.firewalldns.engine.dns.DnsTcpSessionProcessor
 import com.firewalldns.engine.dns.DnsUpstreamResult
+import com.firewalldns.engine.core.DnsEvaluation
 import com.firewalldns.engine.runtime.DnsTcpSessionRegistry
 import com.firewalldns.engine.runtime.DnsTcpSessionWorker
-import com.firewalldns.engine.runtime.EngineRuntime
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
@@ -30,9 +30,9 @@ data class SmoltcpDnsTcpMetrics(
  */
 class SmoltcpDnsTcpCoordinator(
     private val transport: NativeTcpDnsTransport,
-    private val engine: EngineRuntime,
+    private val evaluateDns: (ByteArray, String?) -> DnsEvaluation,
+    private val resolveAppPackage: (ByteArray, Int, ByteArray, Int) -> String?,
     private val exchangeUpstream: (ByteArray, DnsExchangeCancellation) -> DnsUpstreamResult,
-    private val appIdentityResolver: AppIdentityResolver,
     private val onTunPacket: (ByteArray) -> Unit,
     private val wakeOwner: () -> Unit,
     private val maxSessions: Int = 64,
@@ -161,15 +161,14 @@ class SmoltcpDnsTcpCoordinator(
         val flow = checkNotNull(flowBySession[sessionId]) {
             "Missing smoltcp flow metadata for session $sessionId"
         }
-        val appPackage = appIdentityResolver.resolveAppPackage(
-            protocol = IP_PROTOCOL_TCP,
-            sourceAddress = flow.clientAddress,
-            sourcePort = flow.clientPort,
-            destinationAddress = flow.serverAddress,
-            destinationPort = flow.serverPort,
+        val appPackage = resolveAppPackage(
+            flow.clientAddress,
+            flow.clientPort,
+            flow.serverAddress,
+            flow.serverPort,
         )
         return DnsTcpSessionProcessor(
-            evaluateDns = { query, _ -> engine.evaluateDns(query, appPackage) },
+            evaluateDns = { query, _ -> evaluateDns(query, appPackage) },
             exchangeUpstream = { query, cancellation ->
                 exchangeUpstream(query, cancellation)
             },
@@ -275,7 +274,6 @@ class SmoltcpDnsTcpCoordinator(
     }
 
     private companion object {
-        const val IP_PROTOCOL_TCP = 6
         const val POLL_BATCHES_PER_TICK = 4
         const val MAX_INGRESS_PER_BATCH = 32
         const val MAX_EVENTS_PER_TICK = 256

@@ -203,9 +203,17 @@ class FirewallDnsVpnService : VpnService() {
         val ownerWake = ArrayBlockingQueue<Unit>(1)
         val tcpCoordinator = SmoltcpDnsTcpCoordinator(
             transport = nativeTransport,
-            engine = runtime.engine,
+            evaluateDns = runtime.engine::evaluateDns,
+            resolveAppPackage = { sourceAddress, sourcePort, destinationAddress, destinationPort ->
+                appIdentityResolver.resolveAppPackage(
+                    protocol = 6,
+                    sourceAddress = sourceAddress,
+                    sourcePort = sourcePort,
+                    destinationAddress = destinationAddress,
+                    destinationPort = destinationPort,
+                )
+            },
             exchangeUpstream = coordinator::exchangeProtectedUpstream,
-            appIdentityResolver = appIdentityResolver,
             onTunPacket = ::writePacketToTun,
             wakeOwner = { ownerWake.offer(Unit) },
             maxSessions = 64,
