@@ -21,4 +21,4 @@ cargo install cargo-ndk --locked
 ./gradlew :app:assembleDebug
 ```
 
-See [smoltcp Android JNI](docs/SMOLTCP_ANDROID_JNI.md) for thread ownership, event format, limits and test coverage.
+See [smoltcp Android JNI](docs/SMOLTCP_ANDROID_JNI.md) for thread ownership, event format, limits and test coverage. See [external engine review](docs/EXTERNAL_ENGINE_REVIEW.md) for the comparison and license decision on Rethink, NetGuard and HevSocks5Tunnel.
