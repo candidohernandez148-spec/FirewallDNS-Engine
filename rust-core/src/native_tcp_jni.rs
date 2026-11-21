@@ -161,7 +161,7 @@ pub extern "system" fn Java_com_firewalldns_engine_android_NativeTcpDnsTransport
     tun_client_ipv6: JByteArray<'_>,
     max_sessions: jint,
 ) -> jlong {
-    if mtu < 576 || max_sessions <= 0 {
+    if !(576..=9000).contains(&mtu) || !(1..=256).contains(&max_sessions) {
         return 0;
     }
     let dns_ipv4 = match env.convert_byte_array(&tun_dns_ipv4) {
