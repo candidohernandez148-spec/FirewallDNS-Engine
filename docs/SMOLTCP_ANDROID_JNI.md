@@ -11,6 +11,7 @@ Esta implementación conecta el transporte smoltcp 0.14 al TUN del APK de diagn�
 - El hilo propietario llama a poll(), takeEvent(), queueResponse(), closeSession() y takePacket().
 - El puente Rust comprueba ThreadId y rechaza accesos del propietario desde otro hilo.
 - Las colas RX/TX del dispositivo smoltcp están limitadas por paquetes y bytes.
+- El cierre FIN de una sesión half-closed espera a que las respuestas pendientes hayan entrado en el buffer TCP de smoltcp; si no se pueden drenar, se conserva la sesión hasta timeout en vez de descartar silenciosamente los bytes.
 - El sondeo procesa hasta 32 paquetes por lote y hasta cuatro lotes por tick; no usa Interface::poll sin límite.
 
 ## Camino DNS/TCP
