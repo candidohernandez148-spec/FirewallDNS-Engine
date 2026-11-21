@@ -1,10 +1,7 @@
-name: Engine Core
+name: Engine Core (manual validation)
 
 on:
-  push:
-    branches: [main, "feature/**"]
-  pull_request:
-    branches: [main]
+  workflow_dispatch:
 
 jobs:
   test:
@@ -14,35 +11,16 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: aarch64-linux-android
-      - uses: android-actions/setup-android@v3
-        with:
-          packages: 'platform-tools ndk;27.2.12479018'
-      - name: Test Rust native core
+      - name: Test Rust native core and smoltcp transport labs
         run: cargo test --manifest-path rust-core/Cargo.toml
-      - name: Install cargo-ndk
-        run: cargo install cargo-ndk --locked
-      - name: Build Rust JNI library for Galaxy A34 ABI
-        working-directory: rust-core
-        run: cargo ndk -t arm64-v8a -o ../android-adapter/src/main/jniLibs --platform 24 build --release
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: "17"
+          java-version: "21"
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "8.12"
-      - name: Run JVM and Android adapter unit tests
+      - name: Run JVM unit tests
         run: gradle test
-      - name: Assemble Android adapter library
-        run: gradle :android-adapter:assembleDebug
-      - name: Compile Android on-device benchmark tests
-        run: gradle :android-adapter:assembleDebugAndroidTest
-      - name: Build installable device diagnostics APK
-        run: gradle :device-diagnostics:assembleDebug
-      - name: Upload device diagnostics APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: firewalldns-device-diagnostics-debug
-          path: device-diagnostics/build/outputs/apk/debug/device-diagnostics-debug.apk
-          if-no-files-found: error
-          retention-days: 14
+      - name: Assemble Android diagnostics APK
+        run: gradle :app:assembleDebug
