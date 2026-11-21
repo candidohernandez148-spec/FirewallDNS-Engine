@@ -87,10 +87,14 @@ class SmoltcpDnsTcpCoordinator(
         assertOwnerThread()
         val now = clockMillis()
 
-        repeat(POLL_BATCHES_PER_TICK) {
+        for (batch in 0 until POLL_BATCHES_PER_TICK) {
             val result = transport.poll(now, MAX_INGRESS_PER_BATCH)
-            if (result < 0) nativeErrors.incrementAndGet()
+            if (result < 0) {
+                nativeErrors.incrementAndGet()
+                break
+            }
             drainNativeEvents()
+            if (result == 0) break
         }
 
         drainWorkerResponses()
