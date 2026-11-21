@@ -101,6 +101,23 @@ class SmoltcpDnsTcpCoordinator(
         val flushResult = transport.poll(now, 0)
         if (flushResult < 0) nativeErrors.incrementAndGet()
         drainNativeEvents()
+
+        for (sessionId in peerHalfClosed.toList()) {
+            if (registry.isActive(sessionId) && registry.isIdle(sessionId)) {
+                registry.closeSession(sessionId)
+                if (transport.closeSession(sessionId, abort = false)) {
+                    gracefulClosing += sessionId
+                } else {
+                    transport.closeSession(sessionId, abort = true)
+                    cleanupSession(sessionId)
+                }
+            }
+        }
+        if (gracefulClosing.isNotEmpty()) {
+            val closePoll = transport.poll(now, 0)
+            if (closePoll < 0) nativeErrors.incrementAndGet()
+            drainNativeEvents()
+        }
         drainTunPackets()
 
         val expired = registry.expireIdleSessions(clockNanos())
