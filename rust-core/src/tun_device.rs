@@ -122,9 +122,9 @@ pub struct TunRxToken(Vec<u8>);
 impl RxToken for TunRxToken {
     fn consume<R, F>(mut self, f: F) -> R
     where
-        F: FnOnce(&mut [u8]) -> R,
+        F: FnOnce(&[u8]) -> R,
     {
-        f(&mut self.0)
+        f(&self.0)
     }
 }
 
