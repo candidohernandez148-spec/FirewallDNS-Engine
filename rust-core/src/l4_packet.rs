@@ -43,9 +43,9 @@ impl ValidatedTransportPacket<'_> {
 
 /// Validates one complete IP packet and returns its checked TCP/UDP metadata.
 ///
-/// IPv4 options are accepted after validating IHL and header checksum.
-/// IPv4 fragments, IPv6 extension headers, IPv6 jumbograms and trailing bytes
-/// beyond the declared IP length are rejected explicitly.
+/// IPv4 options and supported IPv6 extension headers are parsed and validated.
+/// Non-atomic fragments, ESP, IPv6 jumbograms and trailing bytes beyond the
+/// declared IP length are rejected explicitly.
 pub fn validate_tun_l4_packet(
     packet: &[u8],
 ) -> Result<ValidatedTransportPacket<'_>, PacketValidationResult> {
@@ -341,6 +341,26 @@ mod tests {
             validate_tun_l4_packet(&no_checksum),
             Err(PacketValidationResult::InvalidL4Checksum)
         );
+    }
+
+    #[test]
+    fn validates_tcp_after_ipv6_hop_by_hop_extension() {
+        let base = make_packet(true, IPPROTO_TCP, &[9, 8, 7]);
+        let mut packet = vec![0u8; base.len() + 8];
+        packet[..40].copy_from_slice(&base[..40]);
+        let payload_len = (base.len() - 40 + 8) as u16;
+        packet[4..6].copy_from_slice(&payload_len.to_be_bytes());
+        packet[6] = 0; // Hop-by-Hop Options
+        packet[40] = IPPROTO_TCP;
+        packet[41] = 0; // Eight-byte extension header
+        packet[48..].copy_from_slice(&base[40..]);
+
+        let parsed = validate_tun_l4_packet(&packet).unwrap();
+        assert!(parsed.is_tcp());
+        assert_eq!(parsed.ip_header_len, 40);
+        assert_eq!(parsed.transport_offset, 48);
+        assert_eq!(parsed.destination_port, 53);
+        assert_eq!(parsed.payload, &[9, 8, 7]);
     }
 
     #[test]

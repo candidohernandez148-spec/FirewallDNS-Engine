@@ -515,7 +515,7 @@ fn parse_dns_tcp_flow(packet: &[u8]) -> Option<FlowKey> {
 fn parse_dns_tcp_syn(packet: &[u8]) -> Option<FlowKey> {
     let flow = parse_dns_tcp_flow(packet)?;
     let parsed = validate_tun_l4_packet(packet).ok()?;
-    let flags_offset = parsed.ip_header_len.checked_add(13)?;
+    let flags_offset = parsed.transport_offset.checked_add(13)?;
     let flags = *packet.get(flags_offset)?;
     if flags & 0x02 == 0 || flags & 0x10 != 0 {
         return None;
