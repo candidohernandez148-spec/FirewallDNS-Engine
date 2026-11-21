@@ -195,3 +195,19 @@ El módulo `:android-adapter` se valida en CI con `gradle test` y `gradle :andro
 - Comprueba handshake TCP IPv6 y un intercambio bidireccional de mensajes DNS con prefijo de longitud de dos bytes, verificando que cada stream recibido coincide exactamente con su frame.
 - Ejecutar: `cargo test --manifest-path rust-core/Cargo.toml --test smoltcp_tcp_ipv6_dns`.
 - Esta prueba host-side no integra JNI, descriptor TUN Android, `VpnService.protect()`, upstream, políticas DNS, fragmentación IPv6 ni la VPN productiva. No habilita TCP/53 en producción.
+
+
+## Estado actual: DNS/TCP smoltcp en la VPN productiva
+
+El repositorio Android `FirewallDNS` (main, commit `f1c124a`) conecta DNS TCP/53 IPv4/IPv6 al `DnsFirewallService` mediante JNI y `SmoltcpDnsTcpCoordinator`. No debe usarse la documentación histórica de las pruebas de laboratorio para afirmar que esta integración sigue pendiente.
+
+La CI actual valida:
+- compilación y tests Rust del transporte smoltcp;
+- compilación de la biblioteca nativa para Android ARM64;
+- tests JVM del adaptador;
+- ensamblado de APK principal y APK de diagnóstico;
+- verificación de la biblioteca JNI empaquetada.
+
+El APK de diagnóstico, cuando detecta FirewallDNS activo y el proveedor de métricas accesible, realiza consultas DNS UDP/TCP reales por la VPN. Si FirewallDNS no está activo, las pruebas de políticas y JNI siguen siendo válidas como pruebas locales, pero no demuestran el camino TUN productivo.
+
+La aceptación en Samsung Galaxy A34 5G sigue pendiente: probar IPv4 e IPv6 cuando esté disponible, retransmisión, FIN/RST, sesiones concurrentes, saturación, cambio Wi-Fi/datos, resultado de `VpnService.protect()`, pérdidas, latencia, CPU, memoria, batería y estabilidad prolongada. No marcar esos puntos como aprobados por el resultado de CI.
