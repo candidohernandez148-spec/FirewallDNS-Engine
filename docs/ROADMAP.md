@@ -60,11 +60,11 @@
 
 - [x] Arnés host-side de ciclo de vida TCP smoltcp: pérdida inducida del primer SYN, retransmisión, FIN ordenado y aborto con RST (PR #26, CI verde).
 - [x] Arnés host-side IPv6 TCP DNS smoltcp: handshake e intercambio bidireccional con framing DNS (PR #27, CI verde); no implica integración Android ni producción.
-- [x] Añadir procesador DNS TCP por sesión que conecta el decoder incremental con BLOCK/OBSERVE/ALLOW y upstream, con límites de buffer/trabajo y cierre ante errores (PR de sesión DNS TCP); conectado a `TunTcpStack` con validación de retransmisiones, ventanas deslizantes/cero y cierre FIN/RST bajo carga.
-- [x] Conectar una instancia del procesador a cada socket TCP del stack (`TunTcpStack`) y validar ACK/ventanas/retransmisión/cierre bajo carga (`TunTcpStackLoadTest`).
-- [x] DNS-over-TCP del lado del cliente en Android, fragmentación IP (`IpFragmentReassembler`) y cabeceras de extensión IPv6 (`TunDnsPacketProcessor` + `TunTcpSegmentCodec`).
-- [x] Integrar el plano de datos en producción (`FirewallDnsVpnService` + `TunDataPlaneCoordinator`) tras validar `VpnService.protect()`, ausencia de bucles y cero fugas DNS en puerta preflight y guardas en tiempo de ejecución (`TunDataPlaneIntegrationTest`); pendiente únicamente validación física en dispositivo Samsung Galaxy A34 5G.
-- [x] Validar `protect()`, ausencia de bucles y DNS leaks mediante `TunDataPlaneSecurityValidator`, `AuditedDnsSocketProtector`, `LoopAndLeakGuard` y pruebas automatizadas de integración.
+- [x] Procesador DNS TCP por sesión que conecta el decoder incremental con BLOCK/OBSERVE/ALLOW y upstream, con límites de buffer/trabajo y cierre ante errores. La conexión al transporte queda pendiente de migrar desde `TunTcpStack` Kotlin a smoltcp/Rust.
+- [ ] Conectar una instancia del procesador DNS a cada socket TCP smoltcp y validar ACK/ventanas/retransmisión/cierre bajo carga.
+- [ ] Completar DNS-over-TCP del lado del cliente sobre smoltcp/Rust, manteniendo reensamblado IP y soporte IPv6.
+- [ ] Integrar smoltcp/Rust en el `DnsFirewallService` existente de la aplicación FirewallDNS, sin crear otro `VpnService`; el servicio `FirewallDnsVpnService` de este repositorio pertenece al APK de diagnóstico y no demuestra integración en la app principal.
+- [x] Implementar guardas y pruebas de preflight para `protect()`, bucles y fugas en el entorno de diagnóstico; [ ] validar el comportamiento real y fail-closed en el Samsung A34 5G.
 
 ## Fase 6 — Observabilidad y rendimiento
 - [x] Contadores locales de decisiones, caché, rechazos y eventos descartados.
