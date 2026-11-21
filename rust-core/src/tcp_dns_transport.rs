@@ -598,4 +598,18 @@ mod tests {
         let v6 = to_smoltcp_ip(IpAddr::V6(Ipv6Addr::LOCALHOST));
         assert_eq!(v6, IpAddress::Ipv6(Ipv6Address::new(0, 0, 0, 0, 0, 0, 0, 1)));
     }
+    #[test]
+    fn rejects_unsafe_mtu_and_session_capacity() {
+        let ipv4 = Ipv4Address::new(10, 77, 0, 1);
+        let ipv6 = Ipv6Address::new(0xfd77, 0, 0, 0, 0, 0, 0, 1);
+        assert!(matches!(
+            TcpDnsTransport::new(1500, ipv4, ipv4, ipv6, ipv6, 257),
+            Err(TcpDnsTransportError::InvalidConfiguration),
+        ));
+        assert!(matches!(
+            TcpDnsTransport::new(9001, ipv4, ipv4, ipv6, ipv6, 1),
+            Err(TcpDnsTransportError::InvalidConfiguration),
+        ));
+    }
+
 }
