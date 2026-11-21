@@ -46,7 +46,7 @@ flowchart TD
 | Política | Una autoridad de decisiones `BLOCK / OBSERVE / ALLOW`; el modo OBSERVE permite continuar y registra lo que habría bloqueado. |
 | smoltcp | `Interface` y `SocketSet` pertenecen a un solo hilo. Los workers DNS no los manipulan. |
 | Colas | Límites de paquetes y bytes en JNI, dispositivo RX/TX, eventos y respuestas por sesión. |
-| Upstream | `AndroidDnsSocketProtector` llama a `VpnService.protect()` antes de `connect()` para sockets UDP/TCP; si la protección falla, el intercambio debe fallar cerrado. |
+| Upstream | `AndroidDnsSocketProtector` llama a `VpnService.protect()` antes de `connect()` para sockets UDP/TCP; el callback registra intentos, éxitos y fallos sin datos del socket. Si la protección falla, el intercambio debe fallar cerrado. |
 | Fragmentación | Reensamblador IPv4/IPv6 acotado antes de clasificar. No equivale a soportar todas las extensiones IPv6 o jumbograms. |
 | Privacidad | Los contadores son agregados; no deben persistir payloads, dominios ni direcciones completas. |
 
@@ -59,6 +59,7 @@ flowchart TD
 - `smoltcpNativeErrors`: fallos del límite JNI/poll, no incluye cada rechazo de cola.
 - `queueRejected`: saturación del executor/cola de workers Android; es distinta de los rechazos internos smoltcp.
 - `packetsWritten` y `writeErrors`: respuestas IP escritas al descriptor TUN y fallos de escritura.
+- `upstreamProtectUdp*` y `upstreamProtectTcp*`: intentos y resultados booleanos de `VpnService.protect()` por transporte.
 
 El contador de rechazos nativo se incrementa en los dos límites: validación/saturación de la cola JNI y error al transferir el paquete a `TcpDnsTransport`. El getter JNI solo lee un contador atómico y no toca `Interface`/`SocketSet` desde el lector TUN.
 
