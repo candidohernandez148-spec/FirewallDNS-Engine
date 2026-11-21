@@ -76,7 +76,7 @@ class SmoltcpDnsTcpCoordinator(
             packetsAccepted.incrementAndGet()
             wakeOwnerSafely()
         } else {
-            nativeIngressRejected.set(transport.rejectedPackets().coerceAtLeast(0L))
+            transport.rejectedPackets().takeIf { it >= 0L }?.let(nativeIngressRejected::set)
         }
         return result
     }
@@ -116,7 +116,7 @@ class SmoltcpDnsTcpCoordinator(
             drainNativeEvents()
         }
         drainTunPackets()
-        nativeIngressRejected.set(transport.rejectedPackets().coerceAtLeast(0L))
+        transport.rejectedPackets().takeIf { it >= 0L }?.let(nativeIngressRejected::set)
 
         val expired = registry.expireIdleSessions(clockNanos())
         expired.forEach { sessionId ->
