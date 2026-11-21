@@ -19,6 +19,8 @@ android {
     kotlinOptions {
         jvmTarget = "21"
     }
+
+    sourceSets.getByName("main").jniLibs.srcDir(layout.buildDirectory.dir("generated/jniLibs"))
 }
 
 dependencies {
@@ -31,16 +33,16 @@ dependencies {
 // Build the JNI shared library for the supported Samsung A34 ARM64 target.
 val cargoBuildArm64 by tasks.registering(Exec::class) {
     val rustRoot = rootProject.layout.projectDirectory.dir("rust-core")
-    val jniLibs = layout.projectDirectory.dir("src/main/jniLibs")
-    val output = jniLibs.file("arm64-v8a/libfirewalldns_native.so")
+    val jniLibs = layout.buildDirectory.dir("generated/jniLibs")
+    val output = jniLibs.map { it.file("arm64-v8a/libfirewalldns_native.so") }
     workingDir(rustRoot)
     inputs.files(fileTree(rustRoot) { exclude("target/**") })
     outputs.file(output)
-    doFirst { jniLibs.asFile.mkdirs() }
+    doFirst { jniLibs.get().asFile.mkdirs() }
     commandLine(
         "cargo", "ndk",
         "-t", "arm64-v8a",
-        "-o", jniLibs.asFile.absolutePath,
+        "-o", jniLibs.get().asFile.absolutePath,
         "build", "--release",
     )
 }

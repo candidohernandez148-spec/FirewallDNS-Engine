@@ -63,8 +63,8 @@ fn owner_for<'a>(
 ) -> Result<MutexGuard<'a, OwnerState>, jint> {
     let mut owner = engine.owner.lock().map_err(|_| INVALID_HANDLE)?;
     let current = std::thread::current().id();
-    match owner.owner_thread {
-        Some(owner_thread) if owner_thread != current => Err(WRONG_OWNER_THREAD),
+    match owner.owner_thread.as_ref() {
+        Some(owner_thread) if *owner_thread != current => Err(WRONG_OWNER_THREAD),
         Some(_) => Ok(owner),
         None => {
             owner.owner_thread = Some(current);
