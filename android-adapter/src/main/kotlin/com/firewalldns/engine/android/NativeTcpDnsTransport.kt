@@ -35,6 +35,11 @@ class NativeTcpDnsTransport private constructor(
         return nativeEnqueuePacket(handle, packet, packet.size)
     }
 
+    fun rejectedPackets(): Long {
+        if (closed.get()) return -1L
+        return nativeRejectedPackets(handle)
+    }
+
     fun poll(nowElapsedMillis: Long, maxIngressPackets: Int = 32): Int {
         if (closed.get()) return ERROR_CLOSED
         return nativePoll(handle, nowElapsedMillis, maxIngressPackets)
@@ -160,6 +165,7 @@ class NativeTcpDnsTransport private constructor(
         maxSessions: Int,
     ): Long
     private external fun nativeEnqueuePacket(handle: Long, packet: ByteArray, length: Int): Int
+    private external fun nativeRejectedPackets(handle: Long): Long
     private external fun nativePoll(handle: Long, nowMillis: Long, maxIngressPackets: Int): Int
     private external fun nativeTakePacket(handle: Long): ByteArray
     private external fun nativeTakeEvent(handle: Long): ByteArray

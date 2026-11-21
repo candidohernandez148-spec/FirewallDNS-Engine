@@ -16,9 +16,10 @@ class AndroidEngineRuntime(
     initialRules: Collection<PolicyRule> = emptyList(),
     threatAnalyzer: ThreatAnalyzer = ThreatAnalyzer(),
     monitor: EngineMonitor = EngineMonitor(),
+    onSocketProtectionResult: (DnsSocketProtectionProtocol, Boolean) -> Unit = { _, _ -> },
 ) {
     val engine = EngineRuntime(initialRules, threatAnalyzer, monitor)
-    val socketProtector = AndroidDnsSocketProtector(vpnService)
+    val socketProtector = AndroidDnsSocketProtector(vpnService, onSocketProtectionResult)
     private val sharedResponseCache = DnsResponseCache()
 
     fun createDnsFailover(
