@@ -49,7 +49,7 @@ class SmoltcpDnsTcpCoordinator(
     @Volatile private var ownerThread: Thread? = null
 
     private val packetsAccepted = AtomicLong()
-    private val ingressRejected = AtomicLong()
+    private val nativeIngressRejected = AtomicLong()
     private val sessionsOpened = AtomicLong()
     private val sessionsClosed = AtomicLong()
     private val dataEvents = AtomicLong()
@@ -76,7 +76,7 @@ class SmoltcpDnsTcpCoordinator(
             packetsAccepted.incrementAndGet()
             wakeOwnerSafely()
         } else {
-            ingressRejected.incrementAndGet()
+            nativeIngressRejected.set(transport.rejectedPackets().coerceAtLeast(0L))
         }
         return result
     }
@@ -116,6 +116,7 @@ class SmoltcpDnsTcpCoordinator(
             drainNativeEvents()
         }
         drainTunPackets()
+        nativeIngressRejected.set(transport.rejectedPackets().coerceAtLeast(0L))
 
         val expired = registry.expireIdleSessions(clockNanos())
         expired.forEach { sessionId ->
@@ -135,7 +136,7 @@ class SmoltcpDnsTcpCoordinator(
 
     fun metrics(): SmoltcpDnsTcpMetrics = SmoltcpDnsTcpMetrics(
         packetsAccepted = packetsAccepted.get(),
-        ingressRejected = ingressRejected.get(),
+        ingressRejected = nativeIngressRejected.get(),
         sessionsOpened = sessionsOpened.get(),
         sessionsClosed = sessionsClosed.get(),
         dataEvents = dataEvents.get(),

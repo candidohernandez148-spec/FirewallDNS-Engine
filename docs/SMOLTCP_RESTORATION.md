@@ -42,11 +42,11 @@ El stack Kotlin actual se conserva únicamente como referencia de diagnóstico m
 La rama `feature/smoltcp-014-transport-foundation` migra la dependencia del núcleo nativo de 0.11 a 0.14.0, adapta el contrato `RxToken` y el atributo JNI requerido por Rust 2024. Esta migración es una base de compatibilidad; no declara implementado el adaptador de sesiones ni la integración con el TUN productivo. La aceptación depende de CI.
 
 
-## Estado actualizado después de la integración JNI de diagnóstico
+## Estado del transporte integrado
 
-- smoltcp 0.14 ya implementa el transporte stateful DNS/TCP para IPv4 e IPv6.
-- Se añadió un puente JNI con cola de ingreso independiente para el lector TUN y comprobación de hilo propietario para Interface/SocketSet.
-- El APK de diagnóstico utiliza el transporte nativo para TCP/53 y conserva la ruta de upstream Android protegida/auditada mediante el coordinador existente.
-- Se añadió cierre FIN después de drenar respuestas para sesiones half-closed y se mantienen límites de sesiones, buffers, eventos y colas.
-- CI compila el shared library ARM64 con NDK/cargo-ndk y empaqueta el APK de diagnóstico.
-- La aplicación principal FirewallDNS todavía no contiene esta integración. TCP/53 sigue deshabilitado en su DnsFirewallService hasta portar el adaptador y superar pruebas físicas en Samsung A34 5G.
+- smoltcp 0.14 implementa el transporte stateful DNS/TCP para IPv4 e IPv6.
+- El puente JNI mantiene una cola de ingreso independiente y comprueba el hilo propietario de `Interface`/`SocketSet`.
+- `DnsFirewallService` en FirewallDNS usa el transporte nativo en producción para TCP/53; el APK de diagnóstico también lo prueba directamente.
+- El coordinador reutiliza el decoder incremental, decisiones DNS y upstream protegido, con límites de sesiones, buffers, eventos y colas.
+- La CI compila la biblioteca ARM64 y empaqueta ambos APK.
+- La aceptación final sigue dependiendo de pruebas físicas en Samsung A34 5G.

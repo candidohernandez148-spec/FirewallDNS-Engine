@@ -63,7 +63,8 @@
 - [x] Procesador DNS TCP por sesión que conecta el decoder incremental con BLOCK/OBSERVE/ALLOW y upstream, con límites de buffer/trabajo y cierre ante errores. La conexión al transporte queda pendiente de migrar desde `TunTcpStack` Kotlin a smoltcp/Rust.
 - [x] Conectar una instancia del procesador DNS por sesión TCP smoltcp en el APK de diagnóstico, con decoder, política, upstream protegido y cancelación; validar ACK/ventanas/retransmisión/cierre en pruebas host-side.
 - [x] Implementar el transporte DNS/TCP del lado TUN sobre smoltcp 0.14 para IPv4/IPv6, con eventos por sesión, framing DNS, límites de memoria y respuestas por la misma conexión en el APK de diagnóstico.
-- [ ] Integrar el mismo transporte smoltcp/JNI en el `DnsFirewallService` existente del repositorio FirewallDNS, sin crear otro `VpnService`; el servicio `FirewallDnsVpnService` de este repositorio pertenece al APK de diagnóstico y no demuestra integración en la app principal.
+- [x] Integrar el transporte smoltcp/JNI en el `DnsFirewallService` existente del repositorio FirewallDNS para DNS TCP/53, sin crear otro `VpnService` (main, commit `f1c124a`).
+- [ ] Completar pruebas físicas en Samsung A34 5G para DNS TCP/53 IPv4/IPv6, retransmisión, concurrencia, protección upstream, estabilidad y rendimiento.
 - [x] Implementar guardas y pruebas de preflight para `protect()`, bucles y fugas en el entorno de diagnóstico; [ ] validar el comportamiento real y fail-closed en el Samsung A34 5G.
 
 ## Fase 6 — Observabilidad y rendimiento

@@ -14,7 +14,7 @@ use smoltcp::wire::{Ipv4Address, Ipv6Address};
 use std::collections::{HashMap, VecDeque};
 use std::net::IpAddr;
 use std::ptr;
-use std::sync::atomic::{AtomicI64, Ordering};
+use std::sync::atomic::{AtomicI64, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
 use std::thread::ThreadId;
 
@@ -37,7 +37,6 @@ struct IngressQueue {
     packets: VecDeque<Vec<u8>>,
     queued_bytes: usize,
     mtu: usize,
-    rejected: u64,
 }
 
 struct OwnerState {
@@ -48,6 +47,7 @@ struct OwnerState {
 struct NativeEngine {
     ingress: Mutex<IngressQueue>,
     owner: Mutex<OwnerState>,
+    rejected_packets: AtomicU64,
 }
 
 fn engines() -> &'static Mutex<HashMap<i64, Arc<NativeEngine>>> {
@@ -216,12 +216,12 @@ pub extern "system" fn Java_com_firewalldns_engine_android_NativeTcpDnsTransport
             packets: VecDeque::with_capacity(MAX_INGRESS_PACKETS),
             queued_bytes: 0,
             mtu: mtu as usize,
-            rejected: 0,
         }),
         owner: Mutex::new(OwnerState {
             transport,
             owner_thread: None,
         }),
+        rejected_packets: AtomicU64::new(0),
     });
     match engines().lock() {
         Ok(mut engines) => {
@@ -254,12 +254,12 @@ pub extern "system" fn Java_com_firewalldns_engine_android_NativeTcpDnsTransport
         return INVALID_HANDLE;
     };
     if bytes.is_empty() || bytes.len() > ingress.mtu {
-        ingress.rejected += 1;
+        engine.rejected_packets.fetch_add(1, Ordering::Relaxed);
         return INVALID_ARGUMENT;
     }
     let next_bytes = ingress.queued_bytes.saturating_add(bytes.len());
     if ingress.packets.len() >= MAX_INGRESS_PACKETS || next_bytes > MAX_INGRESS_BYTES {
-        ingress.rejected += 1;
+        engine.rejected_packets.fetch_add(1, Ordering::Relaxed);
         return QUEUE_FULL;
     }
     ingress.queued_bytes = next_bytes;
@@ -298,9 +298,24 @@ pub extern "system" fn Java_com_firewalldns_engine_android_NativeTcpDnsTransport
     };
     let now = Instant::from_millis(now_millis);
     for packet in packets {
-        let _ = owner.transport.enqueue_packet(packet, now);
+        if owner.transport.enqueue_packet(packet, now).is_err() {
+            engine.rejected_packets.fetch_add(1, Ordering::Relaxed);
+        }
     }
     owner.transport.poll(now, budget) as jint
+}
+
+
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_com_firewalldns_engine_android_NativeTcpDnsTransport_nativeRejectedPackets(
+    _env: JNIEnv<'_>,
+    _receiver: JObject<'_>,
+    handle: jlong,
+) -> jlong {
+    let Some(engine) = engine_for(handle) else {
+        return -1;
+    };
+    engine.rejected_packets.load(Ordering::Relaxed).min(i64::MAX as u64) as jlong
 }
 
 #[unsafe(no_mangle)]
