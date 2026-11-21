@@ -51,6 +51,7 @@ Una matriz vacía significa que no hay paquete/evento disponible. Los códigos d
 - `smoltcpPacketsAccepted` significa aceptado por la cola JNI, no procesado por smoltcp.
 - `smoltcpIngressRejected` suma rechazos en cola JNI y rechazos al insertar en la cola RX del dispositivo smoltcp. Se lee desde un contador atómico y no requiere acceso concurrente a Interface/SocketSet.
 - `smoltcpNativeErrors` registra errores del límite JNI/poll; no reemplaza el contador de rechazos.
+- `upstreamProtectUdpAttempts/Success/Failure` y `upstreamProtectTcpAttempts/Success/Failure` registran el resultado real de `VpnService.protect()` antes de conectar cada socket.
 
 ## Compilación
 
