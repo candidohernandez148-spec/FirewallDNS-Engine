@@ -1,5 +1,7 @@
 package com.firewalldns.engine.runtime
 
+import com.firewalldns.engine.dns.DnsTcpSessionProcessor
+
 import java.util.concurrent.atomic.AtomicLong
 
 /**

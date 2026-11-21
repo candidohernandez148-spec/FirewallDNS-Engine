@@ -1,20 +1,15 @@
 package com.firewalldns.engine.runtime
 
+import com.firewalldns.engine.dns.DnsTcpSessionProcessor
 import java.util.ArrayDeque
 import java.util.concurrent.ArrayBlockingQueue
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 
 /**
- * Moves ordered TCP stream chunks through [DnsTcpSessionProcessor] on one bounded
- * I/O worker. The smoltcp poll thread only calls [offer] and [drainResponses];
- * it never performs DNS policy evaluation or upstream network I/O.
- *
- * The host must call [close] when the TCP socket closes and provide
- * [cancelUpstream] that promptly closes the active protected upstream socket.
- * This callback must be non-blocking because queue overflow can invoke it from
- * the caller of [offer]. Response frames are drained by the owner of the
- * smoltcp SocketSet, never written to a smoltcp socket from this worker.
+ * Runs DNS policy and upstream work away from the smoltcp owner thread.
+ * The transport owner only offers ordered stream bytes and drains framed
+ * response bytes; this worker never touches a TCP socket.
  */
 class DnsTcpSessionWorker(
     private val processor: DnsTcpSessionProcessor,
@@ -58,15 +53,9 @@ class DnsTcpSessionWorker(
     val queuedResponseBytes: Int
         get() = synchronized(outputLock) { outputBytes }
 
-    /**
-     * Offers one ordered TCP receive chunk. Any rejected chunk closes the
-     * logical session: continuing after losing stream bytes would desynchronize
-     * DNS framing and is therefore unsafe.
-     */
+    /** Losing any TCP stream bytes is terminal because DNS framing would desynchronize. */
     fun offer(bytes: ByteArray, length: Int = bytes.size): OfferResult {
-        if (length <= 0 || length > bytes.size) {
-            return closeWith("dns_tcp_worker_input_length_invalid")
-        }
+        if (length <= 0 || length > bytes.size) return closeWith("dns_tcp_worker_input_length_invalid")
         synchronized(inputLock) {
             terminalReason?.let { return OfferResult.Closed(it) }
             if (closed.get()) return OfferResult.Closed(terminalReason ?: "dns_tcp_worker_closed")
@@ -86,7 +75,7 @@ class DnsTcpSessionWorker(
         return OfferResult.Accepted
     }
 
-    /** Called by the smoltcp owner thread to move completed DNS frames to its TCP socket. */
+    /** Called only by the smoltcp owner thread; byte chunks remain FIFO ordered. */
     fun drainResponses(maxFrames: Int = DEFAULT_DRAIN_BATCH): List<ByteArray> {
         require(maxFrames in 1..MAX_DRAIN_BATCH)
         synchronized(outputLock) {
@@ -120,11 +109,7 @@ class DnsTcpSessionWorker(
             output.clear()
             outputBytes = 0
         }
-        try {
-            cancelUpstream()
-        } catch (_: Exception) {
-            // Cancellation is best-effort; the worker is still interrupted below.
-        }
+        runCatching(cancelUpstream)
         worker.interrupt()
     }
 
@@ -137,26 +122,33 @@ class DnsTcpSessionWorker(
                     break
                 }
                 val stopAfterTake = synchronized(inputLock) {
-                    if (closed.get()) {
-                        true
-                    } else {
+                    if (closed.get()) true else {
                         inputBytes.addAndGet(-chunk.size)
                         false
                     }
                 }
                 if (stopAfterTake || closed.get()) break
 
-                var result = processor.accept(chunk)
-                while (true) {
+                var result = processor.onIncomingBytes(chunk)
+                while (!closed.get()) {
                     when (result) {
-                        is DnsTcpSessionProcessor.Result.Closed -> {
-                            closeWith(result.reason)
+                        is DnsTcpSessionProcessor.ProcessResult.Processed -> {
+                            val bytes = processor.pollOutbound(maxQueuedResponseBytes)
+                            if (!enqueueFramedResponses(bytes)) return
+                            if (!result.hasMoreWork) break
+                            result = processor.processPendingFrames()
+                        }
+                        DnsTcpSessionProcessor.ProcessResult.Backpressure -> {
+                            closeWith("dns_tcp_worker_processor_backpressure")
                             return
                         }
-                        is DnsTcpSessionProcessor.Result.Batch -> {
-                            if (!enqueueResponses(result.framedResponses)) return
-                            if (!result.hasBufferedData) break
-                            result = processor.accept(byteArrayOf())
+                        DnsTcpSessionProcessor.ProcessResult.Closed -> {
+                            closeWith("dns_tcp_processor_closed")
+                            return
+                        }
+                        is DnsTcpSessionProcessor.ProcessResult.TerminalError -> {
+                            closeWith(result.reason)
+                            return
                         }
                     }
                 }
@@ -166,8 +158,31 @@ class DnsTcpSessionWorker(
         } catch (_: Exception) {
             closeWith("dns_tcp_worker_processing_failed")
         } finally {
-            processor.close(terminalReason ?: "dns_tcp_worker_stopped")
+            processor.close()
         }
+    }
+
+    /** Splits the processor's concatenated RFC 1035 frames without changing their bytes. */
+    private fun enqueueFramedResponses(bytes: ByteArray): Boolean {
+        if (bytes.isEmpty()) return true
+        val frames = ArrayList<ByteArray>()
+        var offset = 0
+        while (offset < bytes.size) {
+            if (bytes.size - offset < 2) {
+                closeWith("dns_tcp_worker_invalid_outbound_framing")
+                return false
+            }
+            val length = ((bytes[offset].toInt() and 0xff) shl 8) or
+                (bytes[offset + 1].toInt() and 0xff)
+            val frameSize = 2 + length
+            if (length < 12 || frameSize > bytes.size - offset) {
+                closeWith("dns_tcp_worker_invalid_outbound_framing")
+                return false
+            }
+            frames += bytes.copyOfRange(offset, offset + frameSize)
+            offset += frameSize
+        }
+        return enqueueResponses(frames)
     }
 
     private fun enqueueResponses(frames: List<ByteArray>): Boolean {
@@ -188,11 +203,7 @@ class DnsTcpSessionWorker(
             closeWith("dns_tcp_worker_response_limit_exceeded")
             return false
         }
-        try {
-            onResponsesAvailable()
-        } catch (_: Exception) {
-            // A wake-up callback must never affect DNS processing or socket state.
-        }
+        runCatching(onResponsesAvailable)
         return true
     }
 
