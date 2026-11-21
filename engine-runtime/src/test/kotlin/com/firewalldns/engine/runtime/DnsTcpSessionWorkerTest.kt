@@ -1,7 +1,10 @@
 package com.firewalldns.engine.runtime
 
+import com.firewalldns.engine.core.PolicyEngine
+import com.firewalldns.engine.dns.DnsPolicyAdapter
 import com.firewalldns.engine.dns.DnsTcpFrameCodec
-import com.firewalldns.engine.dns.DnsTcpFrameDecode
+import com.firewalldns.engine.dns.DnsTcpSessionProcessor
+import com.firewalldns.engine.dns.DnsTcpStreamDecoder
 import com.firewalldns.engine.dns.DnsUpstreamResponse
 import com.firewalldns.engine.dns.DnsUpstreamResult
 import com.firewalldns.engine.dns.DnsUpstreamTransport
@@ -20,9 +23,9 @@ class DnsTcpSessionWorkerTest {
         val expected = response(query)
         val ready = CountDownLatch(1)
         val processor = DnsTcpSessionProcessor(
-            engine = EngineRuntime(),
-            exchangeUpstream = {
-                DnsUpstreamResult.Success(DnsUpstreamResponse(expected, DnsUpstreamTransport.UDP))
+            policyAdapter = DnsPolicyAdapter(PolicyEngine(emptyList())),
+            exchangeUpstream = { message, _ ->
+                DnsUpstreamResult.Success(DnsUpstreamResponse(response(message), DnsUpstreamTransport.TCP))
             },
         )
         val worker = DnsTcpSessionWorker(
@@ -36,7 +39,9 @@ class DnsTcpSessionWorkerTest {
             assertTrue(ready.await(2, TimeUnit.SECONDS), "worker should publish a completed response")
             val drained = worker.drainResponses()
             assertEquals(1, drained.size)
-            val decoded = assertIs<DnsTcpFrameDecode.Complete>(DnsTcpFrameCodec.decode(drained.single()))
+            val decoder = DnsTcpStreamDecoder()
+            assertIs<DnsTcpStreamDecoder.FeedResult.Accepted>(decoder.feed(drained.single()))
+            val decoded = assertIs<DnsTcpStreamDecoder.DrainResult.Frame>(decoder.drainFrame())
             assertContentEquals(expected, decoded.message)
             assertEquals(0, worker.queuedResponseBytes)
         } finally {
@@ -49,16 +54,17 @@ class DnsTcpSessionWorkerTest {
         val upstreamStarted = CountDownLatch(1)
         val cancelCalled = CountDownLatch(1)
         val releaseUpstream = CountDownLatch(1)
-        val query = DnsTcpFrameCodec.encode(query("blocked-worker.example"))
+        val queryFrame = DnsTcpFrameCodec.encode(query("blocked-worker.example"))
+        val processor = DnsTcpSessionProcessor(
+            policyAdapter = DnsPolicyAdapter(PolicyEngine(emptyList())),
+            exchangeUpstream = { _, _ ->
+                upstreamStarted.countDown()
+                releaseUpstream.await(2, TimeUnit.SECONDS)
+                DnsUpstreamResult.Failure("cancelled_test")
+            },
+        )
         val worker = DnsTcpSessionWorker(
-            processor = DnsTcpSessionProcessor(
-                engine = EngineRuntime(),
-                exchangeUpstream = {
-                    upstreamStarted.countDown()
-                    releaseUpstream.await(2, TimeUnit.SECONDS)
-                    DnsUpstreamResult.Failure("cancelled_test")
-                },
-            ),
+            processor = processor,
             cancelUpstream = {
                 cancelCalled.countDown()
                 releaseUpstream.countDown()
@@ -67,10 +73,10 @@ class DnsTcpSessionWorkerTest {
         )
 
         try {
-            assertEquals(DnsTcpSessionWorker.OfferResult.Accepted, worker.offer(query))
+            assertEquals(DnsTcpSessionWorker.OfferResult.Accepted, worker.offer(queryFrame))
             assertTrue(upstreamStarted.await(2, TimeUnit.SECONDS), "worker should enter upstream exchange")
-            assertEquals(DnsTcpSessionWorker.OfferResult.Accepted, worker.offer(query))
-            val rejected = assertIs<DnsTcpSessionWorker.OfferResult.Closed>(worker.offer(query))
+            assertEquals(DnsTcpSessionWorker.OfferResult.Accepted, worker.offer(queryFrame))
+            val rejected = assertIs<DnsTcpSessionWorker.OfferResult.Closed>(worker.offer(queryFrame))
             assertEquals("dns_tcp_worker_queue_full", rejected.reason)
             assertTrue(cancelCalled.await(2, TimeUnit.SECONDS), "queue overflow must cancel upstream")
             assertTrue(worker.isClosed)
@@ -83,22 +89,21 @@ class DnsTcpSessionWorkerTest {
     @Test
     fun closesWhenResponseQueueCannotRetainWholeBatch() {
         val closed = CountDownLatch(1)
-        val query = query("response-limit.example")
+        val queryFrame = DnsTcpFrameCodec.encode(query("response-limit.example"))
+        val processor = DnsTcpSessionProcessor(
+            policyAdapter = DnsPolicyAdapter(PolicyEngine(emptyList())),
+            exchangeUpstream = { message, _ ->
+                DnsUpstreamResult.Success(DnsUpstreamResponse(response(message), DnsUpstreamTransport.TCP))
+            },
+        )
         val worker = DnsTcpSessionWorker(
-            processor = DnsTcpSessionProcessor(
-                engine = EngineRuntime(),
-                exchangeUpstream = {
-                    DnsUpstreamResult.Success(
-                        DnsUpstreamResponse(response(it), DnsUpstreamTransport.UDP),
-                    )
-                },
-            ),
+            processor = processor,
             cancelUpstream = { closed.countDown() },
             maxQueuedResponseBytes = 1,
         )
 
         try {
-            worker.offer(DnsTcpFrameCodec.encode(query))
+            worker.offer(queryFrame)
             assertTrue(closed.await(2, TimeUnit.SECONDS), "response overflow should close the session")
             assertEquals("dns_tcp_worker_response_limit_exceeded", worker.closeReason)
             assertEquals(0, worker.queuedResponseBytes)

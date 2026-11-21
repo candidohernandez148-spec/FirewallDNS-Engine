@@ -107,7 +107,7 @@ fn fold_checksum(mut sum: u64) -> u16 {
 }
 
 /// JNI bridge used only by the Android comparison harness.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "system" fn Java_com_firewalldns_engine_android_NativePacketCore_nativeValidateDnsUdpPacket<'local>(
     mut env: JNIEnv<'local>,
     _receiver: JObject<'local>,

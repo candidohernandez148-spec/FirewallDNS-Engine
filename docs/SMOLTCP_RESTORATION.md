@@ -2,16 +2,16 @@
 
 ## Decisión arquitectónica
 
-Se recupera `smoltcp 0.11` en `rust-core` como implementación objetivo del transporte TCP del motor. No se continuará ampliando una pila TCP/IP propia en Kotlin. La lógica DNS, las decisiones BLOCK / OBSERVE / ALLOW y la composición del runtime permanecen en Kotlin por ahora; el ciclo de vida Android, `VpnService`, el descriptor TUN y `VpnService.protect()` siguen siendo responsabilidad del adaptador Android.
+Se recupera `smoltcp 0.14.0` en `rust-core` como implementación objetivo del transporte TCP del motor. No se continuará ampliando una pila TCP/IP propia en Kotlin. La lógica DNS, las decisiones BLOCK / OBSERVE / ALLOW y la composición del runtime permanecen en Kotlin por ahora; el ciclo de vida Android, `VpnService`, el descriptor TUN y `VpnService.protect()` siguen siendo responsabilidad del adaptador Android.
 
 ## Qué se recuperó en esta etapa
 
-- Crate Rust con dependencia explícita de smoltcp.
+- Crate Rust con dependencia explícita de smoltcp 0.14.0 (Rust 1.91+, edición 2024).
 - Dispositivo TUN virtual con colas RX/TX limitadas por paquetes y bytes.
 - Pruebas host-side de TCP DNS sobre IPv4 e IPv6.
 - Pruebas de ciclo de vida TCP (retransmisión, FIN y RST).
 - Pruebas UDP smoltcp de dispositivo, RX y round-trip.
-- Workflow de validación manual para ejecutar pruebas Rust y tests Gradle sin disparar ejecuciones automáticas en cada push o PR.
+- Workflow de validación manual y automática en PRs que modifican el transporte, con pruebas Rust, comprobación del target Android ARM64 y tests Gradle.
 
 ## Qué NO significa esta recuperación
 
@@ -35,3 +35,8 @@ Se recupera `smoltcp 0.11` en `rust-core` como implementación objetivo del tran
 ## Compatibilidad temporal
 
 El stack Kotlin actual se conserva únicamente como referencia de diagnóstico mientras se completa el adaptador smoltcp. No se considera la arquitectura objetivo y no debe recibir nuevas funciones TCP. Se retirará en un cambio posterior, cuando smoltcp cubra sus contratos y pruebas.
+
+
+## Estado de la migración 0.14
+
+La rama `feature/smoltcp-014-transport-foundation` migra la dependencia del núcleo nativo de 0.11 a 0.14.0, adapta el contrato `RxToken` y el atributo JNI requerido por Rust 2024. Esta migración es una base de compatibilidad; no declara implementado el adaptador de sesiones ni la integración con el TUN productivo. La aceptación depende de CI.
